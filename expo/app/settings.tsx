@@ -13,12 +13,14 @@ import { AppText } from "@/components/ui/Text";
 import { colors, radius, spacing } from "@/constants/theme";
 import { friendlyError } from "@/lib/errors";
 import { pickAvatarImage, uploadToBucket } from "@/lib/media";
+import { registerPushToken } from "@/lib/push";
 import { useUpdateProfile } from "@/hooks/useProfile";
 import { useAuth } from "@/providers/auth";
 import { useToast } from "@/providers/toast";
 
 function PushToggle() {
   const toast = useToast();
+  const { userId } = useAuth();
   const [enabled, setEnabled] = useState<boolean>(false);
 
   useEffect(() => {
@@ -32,8 +34,12 @@ function PushToggle() {
       try {
         const s = await Notifications.requestPermissionsAsync();
         setEnabled(s.granted);
-        if (s.granted) toast.success("Notifications activées");
-        else toast.info("Active les notifications dans les réglages de ton téléphone.");
+        if (s.granted) {
+          if (userId) registerPushToken(userId);
+          toast.success("Notifications activées");
+        } else {
+          toast.info("Active les notifications dans les réglages de ton téléphone.");
+        }
       } catch {
         toast.error("Impossible d'activer les notifications ici.");
       }

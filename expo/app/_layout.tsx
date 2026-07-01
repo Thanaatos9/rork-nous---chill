@@ -37,11 +37,11 @@ function RootNav() {
     }
   }, [isAuthenticated, initializing, segments, router]);
 
-  // Deep links carrying an invite code (rork-app://join?code=XXXX).
+  // Warm-start invite deep links (app already running). Cold-start links are
+  // handled by app/+native-intent.tsx before the tree mounts.
   useEffect(() => {
-    const handleUrl = (url: string | null) => {
-      if (!url) return;
-      const parsed = Linking.parse(url);
+    const sub = Linking.addEventListener("url", (e) => {
+      const parsed = Linking.parse(e.url);
       const code = typeof parsed.queryParams?.code === "string" ? parsed.queryParams.code : null;
       const isJoin = (parsed.path ?? "").toLowerCase().includes("join");
       if (code && isJoin) {
@@ -50,9 +50,7 @@ function RootNav() {
           router.push({ pathname: "/join", params: { code } });
         }
       }
-    };
-    Linking.getInitialURL().then(handleUrl);
-    const sub = Linking.addEventListener("url", (e) => handleUrl(e.url));
+    });
     return () => sub.remove();
   }, [isAuthenticated, router]);
 

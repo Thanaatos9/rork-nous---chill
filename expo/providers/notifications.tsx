@@ -3,6 +3,8 @@ import { useRouter } from "expo-router";
 import React, { useEffect } from "react";
 import { Platform } from "react-native";
 import { colors } from "@/constants/theme";
+import { registerPushToken } from "@/lib/push";
+import { useAuth } from "@/providers/auth";
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -20,6 +22,13 @@ Notifications.setNotificationHandler({
  */
 export function NotificationsProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const { userId } = useAuth();
+
+  // Register this device's Expo push token whenever a user is signed in.
+  useEffect(() => {
+    if (!userId) return;
+    registerPushToken(userId);
+  }, [userId]);
 
   useEffect(() => {
     (async () => {

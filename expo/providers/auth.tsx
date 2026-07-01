@@ -4,6 +4,7 @@ import type { Session, User } from "@supabase/supabase-js";
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { setPendingInvite } from "@/lib/pendingInvite";
+import { unregisterPushToken } from "@/lib/push";
 import type { Profile } from "@/lib/types";
 
 interface SignUpArgs {
@@ -87,8 +88,15 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
   }, []);
 
   const signOut = useCallback(async () => {
+    if (userId) {
+      try {
+        await unregisterPushToken(userId);
+      } catch {
+        // Ignore — sign-out should proceed regardless.
+      }
+    }
     await supabase.auth.signOut();
-  }, []);
+  }, [userId]);
 
   return {
     session,
