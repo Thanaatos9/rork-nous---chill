@@ -5,6 +5,7 @@ struct HomeView: View {
     @Environment(ToastCenter.self) private var toasts
 
     @State private var model = HomeViewModel()
+    private var push = PushCoordinator.shared
     @State private var path: [AppRoute] = []
     @State private var showCreate = false
     @State private var showJoin = false
@@ -54,6 +55,13 @@ struct HomeView: View {
                 joinPrefill = code
                 showJoin = true
             }
+        }
+        .onChange(of: push.pendingJoinCode) { _, code in
+            // Consume an invite deep link received while the app is running.
+            guard let code, !code.isEmpty else { return }
+            push.pendingJoinCode = nil
+            joinPrefill = code
+            showJoin = true
         }
         .sheet(isPresented: $showCreate) {
             CreateSpaceView { newSpaceId in

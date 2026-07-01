@@ -174,8 +174,12 @@ private struct PushToggle: View {
             do {
                 let granted = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound])
                 enabled = granted
-                if granted { toasts.success("Notifications activées") }
-                else { toasts.info("Active les notifications dans les réglages de ton téléphone.") }
+                if granted {
+                    UIApplication.shared.registerForRemoteNotifications()
+                    toasts.success("Notifications activées")
+                } else {
+                    toasts.info("Active les notifications dans les réglages de ton téléphone.")
+                }
             } catch {
                 toasts.error("Impossible d'activer les notifications ici.")
             }

@@ -35,9 +35,13 @@ final class AppState {
                 case .signedOut:
                     self.profile = nil
                     self.isInitializing = false
+                    PushCoordinator.shared.setUser(nil)
                 case .initialSession, .signedIn, .tokenRefreshed, .userUpdated:
                     self.isInitializing = false
-                    if session != nil { await self.loadProfile() }
+                    if session != nil {
+                        await self.loadProfile()
+                        PushCoordinator.shared.setUser(self.userId)
+                    }
                 default:
                     break
                 }
@@ -69,6 +73,7 @@ final class AppState {
     }
 
     func signOut() async {
+        PushCoordinator.shared.setUser(nil)
         try? await supabase.auth.signOut()
         session = nil
         profile = nil
