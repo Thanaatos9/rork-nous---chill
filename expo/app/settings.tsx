@@ -4,6 +4,7 @@ import { Bell, Camera, ChevronRight, LogOut, Info } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import { Alert, Switch, TouchableOpacity, View } from "react-native";
 import { AppHeader } from "@/components/AppHeader";
+import { CoverAdjustModal } from "@/components/CoverAdjustModal";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { Card, Divider, Screen, SectionHeader } from "@/components/ui/Card";
@@ -12,7 +13,7 @@ import { FadeIn } from "@/components/ui/motion";
 import { AppText } from "@/components/ui/Text";
 import { colors, radius, spacing } from "@/constants/theme";
 import { friendlyError } from "@/lib/errors";
-import { pickAvatarImage, uploadMedia } from "@/lib/media";
+import { PickedAsset, pickAvatarImage, uploadMedia } from "@/lib/media";
 import { registerPushToken } from "@/lib/push";
 import { useUpdateProfile } from "@/hooks/useProfile";
 import { useMySpaces } from "@/hooks/useSpaces";
@@ -74,6 +75,7 @@ export default function SettingsScreen() {
   const [bio, setBio] = useState<string>(profile?.bio ?? "");
   const [hydrated, setHydrated] = useState<boolean>(false);
   const [savingAvatar, setSavingAvatar] = useState<boolean>(false);
+  const [pendingAvatar, setPendingAvatar] = useState<PickedAsset | null>(null);
 
   useEffect(() => {
     if (profile && !hydrated) {
@@ -101,13 +103,21 @@ export default function SettingsScreen() {
   const onChangeAvatar = async () => {
     try {
       const asset = await pickAvatarImage();
-      if (!asset) return;
-      setSavingAvatar(true);
+      if (asset) setPendingAvatar(asset);
+    } catch (e) {
+      toast.error(friendlyError(e));
+    }
+  };
+
+  const onAvatarAdjusted = async (cropped: PickedAsset) => {
+    setPendingAvatar(null);
+    setSavingAvatar(true);
+    try {
       // uploadMedia probes the storage rules for an accepted path format and
       // falls back to an inline image if every path is refused.
       const url = await uploadMedia(
         { kind: "avatars", spaceId: spaces?.[0]?.id ?? null, userId: user?.id ?? null },
-        asset,
+        cropped,
       );
       await updateProfile.mutateAsync({ avatar_url: url });
       toast.success("Photo mise à jour");
@@ -175,6 +185,14 @@ export default function SettingsScreen() {
         <LogOut size={18} color={colors.destructive} />
         <AppText style={{ color: colors.destructive, fontWeight: "700" }}>Se déconnecter</AppText>
       </TouchableOpacity>
+
+      <CoverAdjustModal
+        asset={pendingAvatar}
+        title="Ajuster ta photo"
+        shape="circle"
+        onCancel={() => setPendingAvatar(null)}
+        onDone={onAvatarAdjusted}
+      />
     </Screen>
   );
 }

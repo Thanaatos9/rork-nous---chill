@@ -23,6 +23,8 @@ const DIM_COLOR = "rgba(8,8,9,0.82)";
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 4;
 const ZOOM_STEP = 0.35;
+/** Thickness of the border-trick ring that dims the corners around the circular frame. */
+const CIRCLE_PAD = 600;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -32,22 +34,28 @@ interface Props {
   /** The freshly picked image to adjust; null hides the modal. */
   asset: PickedAsset | null;
   title?: string;
+  /** "cover" = wide rounded rectangle (space cover), "circle" = round avatar frame. */
+  shape?: "cover" | "circle";
   onCancel: () => void;
   /** Called with the cropped (framed) asset when the user validates. */
   onDone: (cropped: PickedAsset) => void;
 }
 
 /**
- * Full-screen adjust step shown after picking a cover image: the clear window
- * matches the cover card ratio, the rest is dimmed. The user pans/zooms the
- * image, then validation crops it to exactly what the window shows.
+ * Full-screen adjust step shown after picking a cover or avatar image: the
+ * clear window matches the final frame (cover card ratio, or a circle for
+ * avatars), the rest is dimmed. The user pans/zooms the image, then
+ * validation crops it to exactly what the window shows.
  */
-export function CoverAdjustModal({ asset, title = "Ajuster la couverture", onCancel, onDone }: Props) {
+export function CoverAdjustModal({ asset, title = "Ajuster la couverture", shape = "cover", onCancel, onDone }: Props) {
   const window = Dimensions.get("window");
-  // Clear window matches the SpaceCard ratio (full-width card, 190pt tall).
-  const frameW = Math.round(window.width - spacing.lg * 2 - 8);
+  const isCircle = shape === "circle";
+  // Clear window matches the SpaceCard ratio (full-width card, 190pt tall),
+  // or a centered square for the circular avatar frame.
+  const coverW = Math.round(window.width - spacing.lg * 2 - 8);
   const cardRatio = (window.width - spacing.lg * 2) / 190;
-  const frameH = Math.round(frameW / cardRatio);
+  const frameW = isCircle ? Math.min(coverW, 300) : coverW;
+  const frameH = isCircle ? frameW : Math.round(frameW / cardRatio);
 
   const [imgSize, setImgSize] = useState<{ w: number; h: number } | null>(null);
   const [zoomPct, setZoomPct] = useState<number>(100);
@@ -214,7 +222,9 @@ export function CoverAdjustModal({ asset, title = "Ajuster la couverture", onCan
             <View style={{ flex: 1, paddingRight: spacing.md }}>
               <AppText variant="h3">{title}</AppText>
               <AppText variant="caption" style={{ marginTop: 2 }}>
-                Déplace et zoome — la zone claire sera ta couverture
+                {isCircle
+                  ? "Déplace et zoome — le cercle clair sera ta photo"
+                  : "Déplace et zoome — la zone claire sera ta couverture"}
               </AppText>
             </View>
             <IconButton icon={<X size={20} color={colors.text} />} onPress={onCancel} size={40} />
@@ -240,12 +250,34 @@ export function CoverAdjustModal({ asset, title = "Ajuster la couverture", onCan
               <View style={{ flex: 1, backgroundColor: DIM_COLOR }} />
               <View style={{ flexDirection: "row", height: frameH }}>
                 <View style={{ flex: 1, backgroundColor: DIM_COLOR }} />
-                <View style={{ width: frameW, borderWidth: 2, borderColor: "rgba(255,255,255,0.9)", borderRadius: radius.xl, overflow: "hidden" }}>
-                  <View style={{ position: "absolute", left: "33.33%", top: 0, bottom: 0, width: 1, backgroundColor: "rgba(255,255,255,0.22)" }} />
-                  <View style={{ position: "absolute", left: "66.66%", top: 0, bottom: 0, width: 1, backgroundColor: "rgba(255,255,255,0.22)" }} />
-                  <View style={{ position: "absolute", top: "33.33%", left: 0, right: 0, height: 1, backgroundColor: "rgba(255,255,255,0.22)" }} />
-                  <View style={{ position: "absolute", top: "66.66%", left: 0, right: 0, height: 1, backgroundColor: "rgba(255,255,255,0.22)" }} />
-                </View>
+                {isCircle ? (
+                  <View style={{ width: frameW, height: frameH, overflow: "hidden" }}>
+                    {/* Dim ring: huge border with a circular inner edge dims the square corners. */}
+                    <View
+                      style={{
+                        position: "absolute",
+                        top: -CIRCLE_PAD,
+                        left: -CIRCLE_PAD,
+                        width: frameW + CIRCLE_PAD * 2,
+                        height: frameH + CIRCLE_PAD * 2,
+                        borderWidth: CIRCLE_PAD,
+                        borderColor: DIM_COLOR,
+                        borderRadius: CIRCLE_PAD + frameW / 2,
+                      }}
+                    />
+                    <View style={{ ...StyleSheet.absoluteFillObject, borderWidth: 2, borderColor: "rgba(255,255,255,0.9)", borderRadius: frameW / 2, overflow: "hidden" }}>
+                      <View style={{ position: "absolute", left: "50%", top: 0, bottom: 0, width: 1, backgroundColor: "rgba(255,255,255,0.22)" }} />
+                      <View style={{ position: "absolute", top: "50%", left: 0, right: 0, height: 1, backgroundColor: "rgba(255,255,255,0.22)" }} />
+                    </View>
+                  </View>
+                ) : (
+                  <View style={{ width: frameW, borderWidth: 2, borderColor: "rgba(255,255,255,0.9)", borderRadius: radius.xl, overflow: "hidden" }}>
+                    <View style={{ position: "absolute", left: "33.33%", top: 0, bottom: 0, width: 1, backgroundColor: "rgba(255,255,255,0.22)" }} />
+                    <View style={{ position: "absolute", left: "66.66%", top: 0, bottom: 0, width: 1, backgroundColor: "rgba(255,255,255,0.22)" }} />
+                    <View style={{ position: "absolute", top: "33.33%", left: 0, right: 0, height: 1, backgroundColor: "rgba(255,255,255,0.22)" }} />
+                    <View style={{ position: "absolute", top: "66.66%", left: 0, right: 0, height: 1, backgroundColor: "rgba(255,255,255,0.22)" }} />
+                  </View>
+                )}
                 <View style={{ flex: 1, backgroundColor: DIM_COLOR }} />
               </View>
               <View style={{ flex: 1, backgroundColor: DIM_COLOR }} />

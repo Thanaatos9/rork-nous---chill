@@ -103,13 +103,15 @@ export async function cropImageAsset(asset: PickedAsset, rect: CropRect, imageWi
   };
 }
 
-/** Pick a single square image for an avatar. */
+/**
+ * Pick a single image for an avatar. Returns the raw image (no system
+ * cropper): framing is done afterwards in the in-app adjust screen
+ * (CoverAdjustModal with shape="circle"), which crops via cropImageAsset.
+ */
 export async function pickAvatarImage(): Promise<PickedAsset | null> {
   const result = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ["images"],
-    allowsEditing: true,
-    aspect: [1, 1],
-    quality: 0.6,
+    quality: 0.7,
   });
   if (result.canceled || result.assets.length === 0) return null;
   return toPicked(result.assets[0]);
