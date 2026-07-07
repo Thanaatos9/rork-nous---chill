@@ -10,6 +10,7 @@ struct HomeView: View {
     @State private var showCreate = false
     @State private var showJoin = false
     @State private var joinPrefill: String = ""
+    @State private var showOnboarding = false
 
     private var firstName: String {
         app.profile?.name?.split(separator: " ").first.map(String.init) ?? "toi"
@@ -49,12 +50,13 @@ struct HomeView: View {
         .task(id: app.userId) {
             guard let uid = app.userId else { return }
             await model.load(userId: uid)
-            // Consume a pending invite captured before sign-in.
-            if let code = PendingInvite.get() {
-                PendingInvite.clear()
-                joinPrefill = code
-                showJoin = true
+            // New members see the welcome tutorial first; a pending invite
+            // is consumed right after it closes.
+            if !OnboardingStore.hasSeen(uid) {
+                showOnboarding = true
+                return
             }
+            consumePendingInvite()
         }
         .onChange(of: push.pendingJoinCode) { _, code in
             // Consume an invite deep link received while the app is running.
@@ -75,6 +77,17 @@ struct HomeView: View {
                 path.append(.space(spaceId))
             }
         }
+        .fullScreenCover(isPresented: $showOnboarding, onDismiss: consumePendingInvite) {
+            OnboardingView()
+        }
+    }
+
+    /// Consume an invite code captured before sign-in (deep link or signup field).
+    private func consumePendingInvite() {
+        guard let code = PendingInvite.get() else { return }
+        PendingInvite.clear()
+        joinPrefill = code
+        showJoin = true
     }
 
     // MARK: - Header

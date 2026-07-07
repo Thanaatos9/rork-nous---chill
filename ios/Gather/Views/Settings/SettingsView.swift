@@ -14,6 +14,7 @@ struct SettingsView: View {
     @State private var savingAvatar = false
     @State private var saving = false
     @State private var confirmSignOut = false
+    @State private var showTutorial = false
 
     private var changed: Bool {
         name.trimmed != (app.profile?.name ?? "") || bio.trimmed != (app.profile?.bio ?? "")
@@ -28,7 +29,13 @@ struct SettingsView: View {
 
                     VStack(alignment: .leading, spacing: Spacing.md) {
                         SectionHeader("Préférences")
-                        GatherCard { PushToggle() }
+                        GatherCard {
+                            VStack(spacing: 0) {
+                                PushToggle()
+                                Divider().overlay(Palette.border).padding(.vertical, Spacing.md)
+                                tutorialRow
+                            }
+                        }
                     }
 
                     VStack(alignment: .leading, spacing: Spacing.md) {
@@ -79,12 +86,32 @@ struct SettingsView: View {
             guard let item else { return }
             Task { await changeAvatar(item) }
         }
+        .fullScreenCover(isPresented: $showTutorial) {
+            OnboardingView()
+        }
         .alert("Se déconnecter ?", isPresented: $confirmSignOut) {
             Button("Annuler", role: .cancel) {}
             Button("Se déconnecter", role: .destructive) { Task { await app.signOut() } }
         } message: {
             Text("Tu pourras te reconnecter à tout moment.")
         }
+    }
+
+    private var tutorialRow: some View {
+        Button { showTutorial = true } label: {
+            HStack(spacing: Spacing.md) {
+                Image(systemName: "sparkles").font(.system(size: 18)).foregroundStyle(Palette.text)
+                    .frame(width: 40, height: 40).background(Palette.surface, in: Circle())
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Revoir le didacticiel").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text)
+                    Text("Le tour de bienvenue de Gather").gType(.caption)
+                }
+                Spacer()
+                Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.textFaint)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PressableStyle(scale: 0.98, haptic: false))
     }
 
     private var profileCard: some View {
