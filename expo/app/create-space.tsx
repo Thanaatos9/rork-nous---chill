@@ -5,6 +5,7 @@ import { useRouter } from "expo-router";
 import { Camera, Check, Copy, Film, Share2, Sparkles, X } from "lucide-react-native";
 import { useState } from "react";
 import { Share, TouchableOpacity, View } from "react-native";
+import { CoverAdjustModal } from "@/components/CoverAdjustModal";
 import { IconButton } from "@/components/ui/Button";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -39,6 +40,7 @@ export default function CreateSpaceScreen() {
   const [name, setName] = useState<string>("");
   const [description, setDescription] = useState<string>("");
   const [cover, setCover] = useState<PickedAsset | null>(null);
+  const [pendingCover, setPendingCover] = useState<PickedAsset | null>(null);
   const [start, setStart] = useState<Date>(new Date());
   const [end, setEnd] = useState<Date>(addMonths(new Date(), 3));
   const [loading, setLoading] = useState<boolean>(false);
@@ -48,7 +50,7 @@ export default function CreateSpaceScreen() {
   const onPickCover = async () => {
     try {
       const asset = await pickCoverImage();
-      if (asset) setCover(asset);
+      if (asset) setPendingCover(asset);
     } catch (error) {
       toast.error(friendlyError(error));
     }
@@ -230,6 +232,15 @@ export default function CreateSpaceScreen() {
           <Button title="Créer l'espace" size="lg" onPress={onCreate} loading={loading} icon={<Check size={18} color={colors.primaryFg} />} style={{ marginTop: spacing.sm }} />
         </View>
       </FadeIn>
+
+      <CoverAdjustModal
+        asset={pendingCover}
+        onCancel={() => setPendingCover(null)}
+        onDone={(cropped) => {
+          setCover(cropped);
+          setPendingCover(null);
+        }}
+      />
     </Screen>
   );
 }

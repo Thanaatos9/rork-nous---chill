@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { decode, encode } from "base64-arraybuffer";
 import * as FileSystem from "expo-file-system/legacy";
+import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import { Platform } from "react-native";
 import { MEDIA_BUCKET, supabase } from "./supabase";
@@ -9,6 +10,9 @@ export interface PickedAsset {
   uri: string;
   type: "image" | "video";
   mimeType: string;
+  /** Pixel dimensions when known (used by the crop/adjust UI). */
+  width?: number;
+  height?: number;
 }
 
 function toPicked(asset: ImagePicker.ImagePickerAsset): PickedAsset {
@@ -17,6 +21,8 @@ function toPicked(asset: ImagePicker.ImagePickerAsset): PickedAsset {
     uri: asset.uri,
     type: isVideo ? "video" : "image",
     mimeType: asset.mimeType ?? (isVideo ? "video/mp4" : "image/jpeg"),
+    width: asset.width || undefined,
+    height: asset.height || undefined,
   };
 }
 
@@ -46,16 +52,55 @@ export async function captureWithCamera(): Promise<PickedAsset[]> {
   return result.assets.map(toPicked);
 }
 
-/** Pick a single image for a cover / avatar, with editing enabled. */
+/**
+ * Pick a single image for a cover. Returns the raw image (no system cropper):
+ * framing is done afterwards in the in-app adjust screen (CoverAdjustModal),
+ * which crops via cropImageAsset.
+ */
 export async function pickCoverImage(): Promise<PickedAsset | null> {
   const result = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ["images"],
-    allowsEditing: true,
-    aspect: [3, 4],
-    quality: 0.6,
+    quality: 0.7,
   });
   if (result.canceled || result.assets.length === 0) return null;
   return toPicked(result.assets[0]);
+}
+
+export interface CropRect {
+  originX: number;
+  originY: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Crops an image asset to the given rectangle (in source pixels) and returns
+ * a new local asset. Values are rounded and clamped to the image bounds.
+ */
+export async function cropImageAsset(asset: PickedAsset, rect: CropRect, imageWidth: number, imageHeight: number): Promise<PickedAsset> {
+  const width = Math.max(1, Math.min(Math.round(rect.width), imageWidth));
+  const height = Math.max(1, Math.min(Math.round(rect.height), imageHeight));
+  const originX = Math.max(0, Math.min(Math.round(rect.originX), imageWidth - width));
+  const originY = Math.max(0, Math.min(Math.round(rect.originY), imageHeight - height));
+
+  const context = ImageManipulator.manipulate(asset.uri);
+  context.crop({ originX, originY, width, height });
+  const rendered = await context.renderAsync();
+  const saved = await rendered.saveAsync({ format: SaveFormat.JPEG, compress: 0.85 });
+  try {
+    rendered.release?.();
+    context.release?.();
+  } catch {
+    // Releasing shared objects is a memory optimization only.
+  }
+
+  return {
+    uri: saved.uri,
+    type: "image",
+    mimeType: "image/jpeg",
+    width: saved.width,
+    height: saved.height,
+  };
 }
 
 /** Pick a single square image for an avatar. */

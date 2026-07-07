@@ -3,6 +3,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { Camera, Film, Trash2, X } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import { Alert, TouchableOpacity, View } from "react-native";
+import { CoverAdjustModal } from "@/components/CoverAdjustModal";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Card, Screen, SectionHeader } from "@/components/ui/Card";
 import { DateField } from "@/components/ui/DateField";
@@ -38,6 +39,7 @@ export default function SpaceSettingsScreen() {
   const [start, setStart] = useState<Date | null>(null);
   const [end, setEnd] = useState<Date | null>(null);
   const [newCover, setNewCover] = useState<PickedAsset | null>(null);
+  const [pendingCover, setPendingCover] = useState<PickedAsset | null>(null);
   const [hydrated, setHydrated] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
 
@@ -76,7 +78,7 @@ export default function SpaceSettingsScreen() {
   const onPickCover = async () => {
     try {
       const asset = await pickCoverImage();
-      if (asset) setNewCover(asset);
+      if (asset) setPendingCover(asset);
     } catch (e) {
       toast.error(friendlyError(e));
     }
@@ -184,6 +186,15 @@ export default function SpaceSettingsScreen() {
           <Button title="Supprimer l'espace" variant="destructive" icon={<Trash2 size={17} color="#fff" />} onPress={confirmDelete} loading={deleteSpace.isPending} />
         </Card>
       </View>
+
+      <CoverAdjustModal
+        asset={pendingCover}
+        onCancel={() => setPendingCover(null)}
+        onDone={(cropped) => {
+          setNewCover(cropped);
+          setPendingCover(null);
+        }}
+      />
     </Screen>
   );
 }
