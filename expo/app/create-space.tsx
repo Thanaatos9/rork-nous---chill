@@ -15,10 +15,11 @@ import { FadeIn } from "@/components/ui/motion";
 import { AppText } from "@/components/ui/Text";
 import { colors, radius, spacing } from "@/constants/theme";
 import { friendlyError } from "@/lib/errors";
-import { PickedAsset, pickCoverImage, uploadToBucket } from "@/lib/media";
+import { PickedAsset, pickCoverImage, uploadMedia } from "@/lib/media";
 import type { Space } from "@/lib/types";
 import { useCreateInviteCode } from "@/hooks/useMembers";
 import { useCreateSpace, useUpdateSpace } from "@/hooks/useSpaces";
+import { useAuth } from "@/providers/auth";
 import { useToast } from "@/providers/toast";
 
 function addMonths(date: Date, months: number): Date {
@@ -33,6 +34,7 @@ export default function CreateSpaceScreen() {
   const createSpace = useCreateSpace();
   const updateSpace = useUpdateSpace();
   const createInvite = useCreateInviteCode();
+  const { userId } = useAuth();
 
   const [name, setName] = useState<string>("");
   const [description, setDescription] = useState<string>("");
@@ -75,7 +77,7 @@ export default function CreateSpaceScreen() {
 
       if (cover) {
         try {
-          const coverUrl = await uploadToBucket(`${space.id}/covers`, cover);
+          const coverUrl = await uploadMedia({ kind: "covers", spaceId: space.id, userId }, cover);
           const updated = await updateSpace.mutateAsync({ spaceId: space.id, patch: { cover_url: coverUrl } });
           space.cover_url = updated.cover_url;
         } catch (coverError) {

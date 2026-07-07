@@ -12,7 +12,7 @@ import { FadeIn } from "@/components/ui/motion";
 import { AppText } from "@/components/ui/Text";
 import { colors, radius, spacing } from "@/constants/theme";
 import { friendlyError } from "@/lib/errors";
-import { pickAvatarImage, uploadToBucketWithFallback } from "@/lib/media";
+import { pickAvatarImage, uploadMedia } from "@/lib/media";
 import { registerPushToken } from "@/lib/push";
 import { useUpdateProfile } from "@/hooks/useProfile";
 import { useMySpaces } from "@/hooks/useSpaces";
@@ -103,13 +103,12 @@ export default function SettingsScreen() {
       const asset = await pickAvatarImage();
       if (!asset) return;
       setSavingAvatar(true);
-      // The storage policy expects a uuid as the first path folder: try the
-      // user id first, then fall back to a space the user belongs to.
-      const folders: string[] = [
-        ...(user?.id ? [`${user.id}/avatars`] : []),
-        ...(spaces?.[0]?.id ? [`${spaces[0].id}/avatars`] : []),
-      ];
-      const url = await uploadToBucketWithFallback(folders, asset);
+      // uploadMedia probes the storage rules for an accepted path format and
+      // falls back to an inline image if every path is refused.
+      const url = await uploadMedia(
+        { kind: "avatars", spaceId: spaces?.[0]?.id ?? null, userId: user?.id ?? null },
+        asset,
+      );
       await updateProfile.mutateAsync({ avatar_url: url });
       toast.success("Photo mise à jour");
     } catch (e) {

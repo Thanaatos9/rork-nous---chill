@@ -82,7 +82,10 @@ final class EpisodeDetailViewModel {
     func addMedia(_ media: [PickedMedia]) async throws {
         var uploaded: [(url: String, type: String)] = []
         for item in media {
-            let url = try await StorageService.upload(folder: "\(spaceId)/episodes", data: item.data, contentType: item.contentType, ext: item.ext)
+            let url = try await StorageService.upload(
+                kind: .episodes, spaceId: spaceId, userId: membership?.userId, episodeId: episodeId,
+                data: item.data, contentType: item.contentType, ext: item.ext
+            )
             uploaded.append((url, item.type))
         }
         try await EpisodeService.addMedia(episodeId: episodeId, uploaded: uploaded)

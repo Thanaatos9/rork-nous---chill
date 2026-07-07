@@ -211,18 +211,33 @@ struct CreateEpisodeView: View {
         loading = true
         Task {
             do {
-                var uploaded: [(url: String, type: String)] = []
-                for asset in assets {
-                    let url = try await StorageService.upload(folder: "\(spaceId)/episodes", data: asset.data, contentType: asset.contentType, ext: asset.ext)
-                    uploaded.append((url, asset.type))
-                }
                 let digits = durationStr.filter { $0.isNumber }
                 let duration = digits.isEmpty ? nil : Int(digits)
-                _ = try await EpisodeService.createEpisode(
+                // The episode is created first so uploads can use its id in
+                // candidate storage paths; a failed upload rolls it back.
+                let episode = try await EpisodeService.createEpisode(
                     spaceId: spaceId, userId: uid, title: title,
                     date: ISO8601DateFormatter().string(from: date),
-                    place: place, duration: duration, tags: tags, uploaded: uploaded
+                    place: place, duration: duration, tags: tags, uploaded: []
                 )
+                do {
+                    var uploaded: [(url: String, type: String)] = []
+                    for asset in assets {
+                        let url = try await StorageService.upload(
+                            kind: .episodes, spaceId: spaceId, userId: uid, episodeId: episode.id,
+                            data: asset.data, contentType: asset.contentType, ext: asset.ext
+                        )
+                        uploaded.append((url, asset.type))
+                    }
+                    try await EpisodeService.addMedia(episodeId: episode.id, uploaded: uploaded)
+                    if let coverUrl = uploaded.first(where: { $0.type == "image" })?.url {
+                        try? await EpisodeService.setCover(episodeId: episode.id, url: coverUrl)
+                    }
+                } catch {
+                    // Best-effort rollback so a failed upload doesn't leave an empty episode.
+                    try? await EpisodeService.deleteEpisode(id: episode.id)
+                    throw error
+                }
                 toasts.success("Épisode créé 🎬")
                 onCreated()
                 dismiss()

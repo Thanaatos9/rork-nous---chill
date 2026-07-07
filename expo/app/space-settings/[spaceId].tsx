@@ -12,9 +12,10 @@ import { Loader } from "@/components/ui/Feedback";
 import { AppText } from "@/components/ui/Text";
 import { colors, radius, spacing } from "@/constants/theme";
 import { friendlyError } from "@/lib/errors";
-import { pickCoverImage, PickedAsset, uploadToBucket } from "@/lib/media";
+import { pickCoverImage, PickedAsset, uploadMedia } from "@/lib/media";
 import { isOwner } from "@/lib/types";
 import { useDeleteSpace, useSpace, useUpdateSpace } from "@/hooks/useSpaces";
+import { useAuth } from "@/providers/auth";
 import { useToast } from "@/providers/toast";
 
 function toDateOrNull(value: string | null): Date | null {
@@ -27,6 +28,7 @@ export default function SpaceSettingsScreen() {
   const { spaceId } = useLocalSearchParams<{ spaceId: string }>();
   const router = useRouter();
   const toast = useToast();
+  const { userId } = useAuth();
   const { data: space, isLoading } = useSpace(spaceId);
   const updateSpace = useUpdateSpace();
   const deleteSpace = useDeleteSpace();
@@ -88,7 +90,7 @@ export default function SpaceSettingsScreen() {
     setSaving(true);
     try {
       let coverUrl = space.cover_url;
-      if (newCover) coverUrl = await uploadToBucket(`${spaceId}/covers`, newCover);
+      if (newCover) coverUrl = await uploadMedia({ kind: "covers", spaceId, userId }, newCover);
       await updateSpace.mutateAsync({
         spaceId,
         patch: {

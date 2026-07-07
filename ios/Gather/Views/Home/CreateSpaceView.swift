@@ -211,7 +211,10 @@ struct CreateSpaceView: View {
                 )
                 if let coverData {
                     do {
-                        let coverUrl = try await StorageService.upload(folder: "\(space.id)/covers", data: coverData, contentType: "image/jpeg", ext: "jpg")
+                        let coverUrl = try await StorageService.upload(
+                            kind: .covers, spaceId: space.id, userId: uid,
+                            data: coverData, contentType: "image/jpeg", ext: "jpg"
+                        )
                         space = try await SpaceService.updateCover(id: space.id, coverUrl: coverUrl)
                     } catch {
                         toasts.info("Espace créé, mais la couverture n'a pas pu être envoyée. Réessaie depuis les paramètres.")

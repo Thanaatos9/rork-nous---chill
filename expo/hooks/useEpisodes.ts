@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { qk } from "@/lib/keys";
-import { PickedAsset, uploadToBucket } from "@/lib/media";
+import { PickedAsset, uploadMedia } from "@/lib/media";
 import { supabase } from "@/lib/supabase";
 import type { Episode, EpisodeMedia } from "@/lib/types";
 import { useAuth } from "@/providers/auth";
@@ -62,15 +62,9 @@ export function useCreateEpisode() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (input: CreateEpisodeInput): Promise<Episode> => {
-      const uploaded: { url: string; type: string }[] = [];
-      let coverUrl: string | null = null;
-      for (const asset of input.assets) {
-        const url = await uploadToBucket(`${input.spaceId}/episodes`, asset);
-        uploaded.push({ url, type: asset.type });
-        if (!coverUrl && asset.type === "image") coverUrl = url;
-      }
-
-      const { data: episode, error } = await supabase
+      // The episode is created first so uploads can use its id in candidate
+      // storage paths; a failed upload rolls the episode back.
+      const { data, error } = await supabase
         .from("episodes")
         .insert({
           space_id: input.spaceId,
@@ -79,24 +73,43 @@ export function useCreateEpisode() {
           place: input.place?.trim() || null,
           duration: input.duration ?? null,
           tags: input.tags && input.tags.length > 0 ? input.tags : null,
-          cover_url: coverUrl,
+          cover_url: null,
           created_by: userId,
         })
         .select("*")
         .single();
       if (error) throw error;
+      const episode = data as Episode;
 
-      if (uploaded.length > 0) {
-        const rows = uploaded.map((u) => ({
-          episode_id: (episode as Episode).id,
-          url: u.url,
-          type: u.type,
-        }));
-        const { error: mediaError } = await supabase.from("episode_media").insert(rows);
-        if (mediaError) throw mediaError;
+      try {
+        const uploaded: { url: string; type: string }[] = [];
+        let coverUrl: string | null = null;
+        for (const asset of input.assets) {
+          const url = await uploadMedia(
+            { kind: "episodes", spaceId: input.spaceId, userId, episodeId: episode.id },
+            asset,
+          );
+          uploaded.push({ url, type: asset.type });
+          if (!coverUrl && asset.type === "image") coverUrl = url;
+        }
+
+        if (uploaded.length > 0) {
+          const rows = uploaded.map((u) => ({ episode_id: episode.id, url: u.url, type: u.type }));
+          const { error: mediaError } = await supabase.from("episode_media").insert(rows);
+          if (mediaError) throw mediaError;
+        }
+
+        if (coverUrl) {
+          await supabase.from("episodes").update({ cover_url: coverUrl }).eq("id", episode.id);
+          episode.cover_url = coverUrl;
+        }
+
+        return episode;
+      } catch (uploadError) {
+        // Best-effort rollback so a failed upload doesn't leave an empty episode.
+        await supabase.from("episodes").delete().eq("id", episode.id);
+        throw uploadError;
       }
-
-      return episode as Episode;
     },
     onSuccess: (episode) => {
       queryClient.invalidateQueries({ queryKey: qk.episodes(episode.space_id) });
@@ -106,12 +119,13 @@ export function useCreateEpisode() {
 
 /** Adds extra media to an existing episode (camera/gallery). */
 export function useAddEpisodeMedia(episodeId: string, spaceId: string) {
+  const { userId } = useAuth();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (assets: PickedAsset[]): Promise<void> => {
       const rows: { episode_id: string; url: string; type: string }[] = [];
       for (const asset of assets) {
-        const url = await uploadToBucket(`${spaceId}/episodes`, asset);
+        const url = await uploadMedia({ kind: "episodes", spaceId, userId, episodeId }, asset);
         rows.push({ episode_id: episodeId, url, type: asset.type });
       }
       if (rows.length > 0) {

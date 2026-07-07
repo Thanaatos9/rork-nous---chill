@@ -70,6 +70,18 @@ enum EpisodeService {
         return episode
     }
 
+    static func setCover(episodeId: String, url: String) async throws {
+        try await supabase
+            .from("episodes")
+            .update(["cover_url": AnyJSON.string(url)])
+            .eq("id", value: episodeId)
+            .execute()
+    }
+
+    static func deleteEpisode(id: String) async throws {
+        try await supabase.from("episodes").delete().eq("id", value: id).execute()
+    }
+
     static func addMedia(episodeId: String, uploaded: [(url: String, type: String)]) async throws {
         guard !uploaded.isEmpty else { return }
         let rows = uploaded.map { item in

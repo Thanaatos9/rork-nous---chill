@@ -11,6 +11,7 @@ export function friendlyError(e: unknown): string {
   if (/rate limit|too many/i.test(msg)) return "Trop de tentatives. Réessaie dans un instant.";
   if (/row-level security|violates row-level|not authorized|permission denied/i.test(msg))
     return "Tu n'as pas les droits pour cette action.";
+  if (/invalid input syntax/i.test(msg)) return "Le serveur a refusé cet envoi. Réessaie.";
   if (/duplicate key|already exists/i.test(msg)) return "Cet élément existe déjà.";
   if (/network|fetch|timeout|Failed to/i.test(msg)) return "Problème de connexion. Vérifie ton réseau.";
   return msg || "Une erreur est survenue.";

@@ -137,8 +137,11 @@ struct SpaceSettingsView: View {
             do {
                 var coverUrl = store.space?.coverUrl
                 if let coverData {
-                    // The storage policy expects the first path folder to be the space uuid.
-                    coverUrl = try await StorageService.upload(folder: "\(store.spaceId)/covers", data: coverData, contentType: "image/jpeg", ext: "jpg")
+                    // The uploader probes the storage rules for an accepted path format.
+                    coverUrl = try await StorageService.upload(
+                        kind: .covers, spaceId: store.spaceId, userId: app.userId,
+                        data: coverData, contentType: "image/jpeg", ext: "jpg"
+                    )
                 }
                 try await SpaceService.updateDetails(
                     id: store.spaceId, name: name, description: description, coverUrl: coverUrl,

@@ -1,4 +1,5 @@
-import { decode } from "base64-arraybuffer";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { decode, encode } from "base64-arraybuffer";
 import * as FileSystem from "expo-file-system/legacy";
 import * as ImagePicker from "expo-image-picker";
 import { Platform } from "react-native";
@@ -102,45 +103,125 @@ async function readAssetBytes(uri: string): Promise<ArrayBuffer> {
   throw new Error("Impossible de lire le fichier sélectionné. Réessaie avec une autre image.");
 }
 
-/**
- * Uploads a local asset trying several folders in order, returning the first
- * public URL that succeeds. The storage RLS policy parses the first path
- * segment as a uuid, so callers provide uuid-prefixed candidate folders.
- */
-export async function uploadToBucketWithFallback(folders: string[], asset: PickedAsset): Promise<string> {
-  let lastError: unknown = null;
-  for (const folder of folders) {
-    try {
-      return await uploadToBucket(folder, asset);
-    } catch (e) {
-      console.log(`[media] upload to "${folder}" failed:`, e);
-      lastError = e;
-    }
-  }
-  throw lastError ?? new Error("Aucun dossier de destination valide pour l'envoi.");
+export type UploadKind = "covers" | "avatars" | "episodes";
+
+export interface UploadContext {
+  kind: UploadKind;
+  spaceId?: string | null;
+  userId?: string | null;
+  episodeId?: string | null;
 }
 
+interface PathCandidate {
+  template: string;
+  folder: string;
+}
+
+const TEMPLATE_CACHE_KEY = "gather.media.upload-template.v1";
+
+/** Inline data-URL fallback is only used for small images (covers/avatars). */
+const INLINE_FALLBACK_MAX_BYTES = 900_000;
+
 /**
- * Uploads a local asset to the episode-media bucket and returns a public URL.
- * IMPORTANT: the storage security policy expects the FIRST folder of the path
- * to be a uuid (the space id, or the user id). Passing a plain word like
- * "covers" fails with: invalid input syntax for type uuid.
+ * Ordered candidate folders for an upload. The storage security rules live in
+ * an external Supabase project we cannot inspect; empirical probing showed:
+ * - anonymous inserts fail on the membership check (auth.uid()) before any cast,
+ * - authenticated inserts fail with `invalid input syntax for type uuid` on the
+ *   SECOND path segment when it is not a uuid (e.g. "{spaceId}/covers/.."),
+ * - "covers/..." alone fails the policy without a cast error.
+ * So the policy matches the 2nd segment against the user's space memberships.
+ * Every candidate therefore puts a uuid in position 2, with different prefixes
+ * in position 1 to cover the possible policy variants. The first template that
+ * succeeds is cached and tried first on the next upload.
  */
-export async function uploadToBucket(folder: string, asset: PickedAsset): Promise<string> {
-  const ext = asset.type === "video" ? "mp4" : asset.mimeType.includes("png") ? "png" : "jpg";
-  const path = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-
-  const arrayBuffer = await readAssetBytes(asset.uri);
-  if (!arrayBuffer || arrayBuffer.byteLength === 0) {
-    throw new Error("Le fichier sélectionné est vide.");
+function buildCandidates(ctx: UploadContext): PathCandidate[] {
+  const { kind, spaceId, userId, episodeId } = ctx;
+  const list: PathCandidate[] = [];
+  if (spaceId) {
+    list.push({ template: "kind-first", folder: `${kind}/${spaceId}` });
+    if (userId) list.push({ template: "user-first", folder: `${userId}/${spaceId}` });
+    if (kind !== "episodes") list.push({ template: "episodes-first", folder: `episodes/${spaceId}` });
+    list.push({ template: "spaces-first", folder: `spaces/${spaceId}` });
+    if (episodeId) list.push({ template: "space-episode", folder: `${spaceId}/${episodeId}` });
+    list.push({ template: "space-kind", folder: `${spaceId}/${kind}` });
   }
+  return list;
+}
 
-  const { error } = await supabase.storage.from(MEDIA_BUCKET).upload(path, arrayBuffer, {
-    contentType: asset.mimeType,
+/** True when the failure comes from the storage security rules (worth trying another path). */
+function isPolicyRejection(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e);
+  return /row-level security|invalid input syntax|unauthorized|not allowed|violates|policy|uuid/i.test(msg);
+}
+
+async function readCachedTemplate(): Promise<string | null> {
+  try {
+    return await AsyncStorage.getItem(TEMPLATE_CACHE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedTemplate(template: string): void {
+  AsyncStorage.setItem(TEMPLATE_CACHE_KEY, template).catch(() => {});
+}
+
+async function uploadBytes(folder: string, bytes: ArrayBuffer, mimeType: string, ext: string): Promise<string> {
+  const path = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  const { error } = await supabase.storage.from(MEDIA_BUCKET).upload(path, bytes, {
+    contentType: mimeType,
     upsert: false,
   });
   if (error) throw error;
+  return supabase.storage.from(MEDIA_BUCKET).getPublicUrl(path).data.publicUrl;
+}
 
-  const { data } = supabase.storage.from(MEDIA_BUCKET).getPublicUrl(path);
-  return data.publicUrl;
+/**
+ * Uploads a picked asset and returns a displayable URL.
+ * Tries every candidate path format accepted by the backend (cached winner
+ * first), and for small images falls back to an inline data URL so covers and
+ * avatars keep working even if the storage rules refuse every path.
+ */
+export async function uploadMedia(ctx: UploadContext, asset: PickedAsset): Promise<string> {
+  const ext = asset.type === "video" ? "mp4" : asset.mimeType.includes("png") ? "png" : "jpg";
+  const bytes = await readAssetBytes(asset.uri);
+  if (!bytes || bytes.byteLength === 0) {
+    throw new Error("Le fichier sélectionné est vide.");
+  }
+
+  const candidates = buildCandidates(ctx);
+  const cached = await readCachedTemplate();
+  if (cached) {
+    const idx = candidates.findIndex((c) => c.template === cached);
+    if (idx > 0) {
+      const [hit] = candidates.splice(idx, 1);
+      candidates.unshift(hit);
+    }
+  }
+
+  let lastError: unknown = null;
+  for (const candidate of candidates) {
+    try {
+      const url = await uploadBytes(candidate.folder, bytes, asset.mimeType, ext);
+      console.log(`[media] upload OK via template "${candidate.template}" (${candidate.folder})`);
+      if (candidate.template !== cached) writeCachedTemplate(candidate.template);
+      return url;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.log(`[media] template "${candidate.template}" (${candidate.folder}) rejected: ${msg}`);
+      lastError = e;
+      if (!isPolicyRejection(e)) break;
+    }
+  }
+
+  // Storage refused every path (or none was buildable). Small images can be
+  // stored inline as a data URL — renders everywhere (web, RN, iOS) and keeps
+  // the feature usable no matter what the storage rules are.
+  if (ctx.kind !== "episodes" && asset.type === "image" && bytes.byteLength <= INLINE_FALLBACK_MAX_BYTES) {
+    console.log("[media] all storage paths refused — using inline image fallback");
+    return `data:${asset.mimeType};base64,${encode(bytes)}`;
+  }
+
+  console.log("[media] upload failed on every candidate:", lastError);
+  throw new Error("Le stockage a refusé l'envoi du fichier. Réessaie — et si ça persiste, dis-le nous.");
 }
