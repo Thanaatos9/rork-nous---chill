@@ -1,10 +1,10 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
-import { Clapperboard, Film, Lock, Share2, Sparkles, Users } from "lucide-react-native";
+import { ChevronLeft, Clapperboard, Film, Lock, Share2, Sparkles, Users } from "lucide-react-native";
 import React from "react";
 import { Alert, RefreshControl, Share, View } from "react-native";
-import { Button } from "@/components/ui/Button";
+import { Button, IconButton } from "@/components/ui/Button";
 import { Card, Screen } from "@/components/ui/Card";
 import { Loader } from "@/components/ui/Feedback";
 import { FadeIn, Pulse } from "@/components/ui/motion";
@@ -100,9 +100,17 @@ export default function RecapScreen() {
 
   return (
     <Screen scroll contentStyle={{ paddingHorizontal: spacing.lg }} refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.primary} />}>
-      <View style={{ paddingTop: spacing.sm, marginBottom: spacing.xl }}>
-        <AppText variant="title">Bilan de saison</AppText>
-        <AppText variant="caption">{space.name}</AppText>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.md, paddingTop: spacing.sm, marginBottom: spacing.xl }}>
+        <IconButton
+          icon={<ChevronLeft size={22} color={colors.text} />}
+          variant="secondary"
+          size={40}
+          onPress={() => (router.canGoBack() ? router.back() : router.replace("/"))}
+        />
+        <View style={{ flex: 1 }}>
+          <AppText variant="title">Bilan de saison</AppText>
+          <AppText variant="caption">{space.name}</AppText>
+        </View>
       </View>
 
       {!unlocked ? (

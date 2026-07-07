@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { Clapperboard, LayoutGrid, Plus, Rows3 } from "lucide-react-native";
+import { ChevronLeft, Clapperboard, LayoutGrid, Plus, Rows3 } from "lucide-react-native";
 import React, { useState } from "react";
 import { Dimensions, RefreshControl, View } from "react-native";
 import { EpisodePoster, EpisodeRow } from "@/components/EpisodeCard";
@@ -57,8 +57,14 @@ export default function EpisodesScreen() {
       contentStyle={{ paddingHorizontal: spacing.lg }}
       refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.primary} />}
     >
-      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingTop: spacing.sm, marginBottom: spacing.lg }}>
-        <View>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.md, paddingTop: spacing.sm, marginBottom: spacing.lg }}>
+        <IconButton
+          icon={<ChevronLeft size={22} color={colors.text} />}
+          variant="secondary"
+          size={40}
+          onPress={() => (router.canGoBack() ? router.back() : router.replace("/"))}
+        />
+        <View style={{ flex: 1 }}>
           <AppText variant="title">Épisodes</AppText>
           <AppText variant="caption">{episodes?.length ?? 0} moment{(episodes?.length ?? 0) > 1 ? "s" : ""} vécu{(episodes?.length ?? 0) > 1 ? "s" : ""}</AppText>
         </View>

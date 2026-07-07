@@ -1,7 +1,7 @@
 import * as Clipboard from "expo-clipboard";
 import * as Linking from "expo-linking";
-import { useLocalSearchParams } from "expo-router";
-import { Copy, Plus, Share2, Ticket, Trash2, X } from "lucide-react-native";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { ChevronLeft, Copy, Plus, Share2, Ticket, Trash2, X } from "lucide-react-native";
 import React, { useState } from "react";
 import { Alert, RefreshControl, Share, Switch, TouchableOpacity, View } from "react-native";
 import { Avatar } from "@/components/ui/Avatar";
@@ -24,6 +24,7 @@ import { useToast } from "@/providers/toast";
 
 export default function MembersScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
   const toast = useToast();
   const { userId } = useAuth();
   const { data: space } = useSpace(id);
@@ -57,9 +58,17 @@ export default function MembersScreen() {
 
   return (
     <Screen scroll contentStyle={{ paddingHorizontal: spacing.lg }} refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.primary} />}>
-      <View style={{ paddingTop: spacing.sm, marginBottom: spacing.lg }}>
-        <AppText variant="title">Membres</AppText>
-        <AppText variant="caption">{members?.length ?? 0} personne{(members?.length ?? 0) > 1 ? "s" : ""} dans l&apos;aventure</AppText>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.md, paddingTop: spacing.sm, marginBottom: spacing.lg }}>
+        <IconButton
+          icon={<ChevronLeft size={22} color={colors.text} />}
+          variant="secondary"
+          size={40}
+          onPress={() => (router.canGoBack() ? router.back() : router.replace("/"))}
+        />
+        <View style={{ flex: 1 }}>
+          <AppText variant="title">Membres</AppText>
+          <AppText variant="caption">{members?.length ?? 0} personne{(members?.length ?? 0) > 1 ? "s" : ""} dans l&apos;aventure</AppText>
+        </View>
       </View>
 
       {isLoading ? (

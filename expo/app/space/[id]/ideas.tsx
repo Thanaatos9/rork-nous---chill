@@ -1,5 +1,5 @@
-import { useLocalSearchParams } from "expo-router";
-import { Flame, Lightbulb, Plus, Trash2, X } from "lucide-react-native";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { ChevronLeft, Flame, Lightbulb, Plus, Trash2, X } from "lucide-react-native";
 import React, { useMemo, useState } from "react";
 import { RefreshControl, TouchableOpacity, View } from "react-native";
 import { Avatar } from "@/components/ui/Avatar";
@@ -20,6 +20,7 @@ import { useToast } from "@/providers/toast";
 
 export default function IdeasScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
   const toast = useToast();
   const { userId } = useAuth();
   const { data: space } = useSpace(id);
@@ -62,8 +63,14 @@ export default function IdeasScreen() {
 
   return (
     <Screen scroll contentStyle={{ paddingHorizontal: spacing.lg }} refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.primary} />}>
-      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingTop: spacing.sm, marginBottom: spacing.lg }}>
-        <View>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.md, paddingTop: spacing.sm, marginBottom: spacing.lg }}>
+        <IconButton
+          icon={<ChevronLeft size={22} color={colors.text} />}
+          variant="secondary"
+          size={40}
+          onPress={() => (router.canGoBack() ? router.back() : router.replace("/"))}
+        />
+        <View style={{ flex: 1 }}>
           <AppText variant="title">Idées</AppText>
           <AppText variant="caption">Vos prochaines aventures, votées ensemble</AppText>
         </View>
