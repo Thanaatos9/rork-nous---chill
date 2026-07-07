@@ -59,6 +59,7 @@ function RootNav() {
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}>
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="index" />
+        <Stack.Screen name="onboarding" options={{ presentation: "fullScreenModal", gestureEnabled: false, animation: "fade" }} />
         <Stack.Screen name="space/[id]" />
         <Stack.Screen name="space-settings/[spaceId]" options={{ presentation: "modal" }} />
         <Stack.Screen name="episode/[episodeId]" />

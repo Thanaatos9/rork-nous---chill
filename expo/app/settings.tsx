@@ -1,6 +1,6 @@
 import * as Notifications from "expo-notifications";
 import { useRouter } from "expo-router";
-import { Bell, Camera, ChevronRight, LogOut, Info } from "lucide-react-native";
+import { Bell, Camera, ChevronRight, GraduationCap, LogOut, Info } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import { Alert, Switch, TouchableOpacity, View } from "react-native";
 import { AppHeader } from "@/components/AppHeader";
@@ -163,8 +163,22 @@ export default function SettingsScreen() {
 
       <View style={{ marginTop: spacing.xxl }}>
         <SectionHeader title="Préférences" />
-        <Card>
+        <Card style={{ gap: spacing.lg }}>
           <PushToggle />
+          <Divider />
+          <TouchableOpacity
+            onPress={() => router.push("/onboarding")}
+            style={{ flexDirection: "row", alignItems: "center", gap: spacing.md }}
+          >
+            <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" }}>
+              <GraduationCap size={18} color={colors.text} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <AppText style={{ fontWeight: "600", fontSize: 15, color: colors.text }}>Revoir le didacticiel</AppText>
+              <AppText variant="caption">Le petit tour de bienvenue de Gather</AppText>
+            </View>
+            <ChevronRight size={18} color={colors.textFaint} />
+          </TouchableOpacity>
         </Card>
       </View>
 

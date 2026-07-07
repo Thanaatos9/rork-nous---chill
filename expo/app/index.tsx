@@ -1,6 +1,6 @@
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { Bell, Plus, Sparkles, Ticket } from "lucide-react-native";
-import { useEffect } from "react";
+import { useCallback } from "react";
 import { RefreshControl, TouchableOpacity, View } from "react-native";
 import { AppHeader } from "@/components/AppHeader";
 import { SpaceCard } from "@/components/SpaceCard";
@@ -11,6 +11,7 @@ import { EmptyState, Loader } from "@/components/ui/Feedback";
 import { FadeIn, PressableScale } from "@/components/ui/motion";
 import { AppText } from "@/components/ui/Text";
 import { colors, radius, spacing } from "@/constants/theme";
+import { hasSeenOnboarding } from "@/lib/onboarding";
 import { clearPendingInvite, getPendingInvite } from "@/lib/pendingInvite";
 import { useUnreadCount } from "@/hooks/useNotifications";
 import { useMySpaces } from "@/hooks/useSpaces";
@@ -18,22 +19,35 @@ import { useAuth } from "@/providers/auth";
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { profile } = useAuth();
+  const { profile, userId } = useAuth();
   const { data: spaces, isLoading, refetch, isRefetching } = useMySpaces();
   const unread = useUnreadCount();
 
-  useEffect(() => {
-    let active = true;
-    getPendingInvite().then((code) => {
-      if (active && code) {
-        clearPendingInvite();
-        router.push({ pathname: "/join", params: { code } });
-      }
-    });
-    return () => {
-      active = false;
-    };
-  }, [router]);
+  // First visit → welcome tutorial. Once seen, resume any pending invite.
+  // useFocusEffect (not useEffect) so the invite is consumed when the user
+  // comes back from the tutorial.
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      (async () => {
+        if (!userId) return;
+        const seen = await hasSeenOnboarding(userId);
+        if (!active) return;
+        if (!seen) {
+          router.push("/onboarding");
+          return;
+        }
+        const code = await getPendingInvite();
+        if (active && code) {
+          await clearPendingInvite();
+          router.push({ pathname: "/join", params: { code } });
+        }
+      })();
+      return () => {
+        active = false;
+      };
+    }, [userId, router])
+  );
 
   const firstName = profile?.name?.split(" ")[0] ?? "toi";
 
