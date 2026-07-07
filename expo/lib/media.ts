@@ -1,4 +1,5 @@
-import { File } from "expo-file-system";
+import { decode } from "base64-arraybuffer";
+import * as FileSystem from "expo-file-system/legacy";
 import * as ImagePicker from "expo-image-picker";
 import { Platform } from "react-native";
 import { MEDIA_BUCKET, supabase } from "./supabase";
@@ -70,24 +71,35 @@ export async function pickAvatarImage(): Promise<PickedAsset | null> {
 
 /**
  * Reads a picked asset into an ArrayBuffer, whatever the URI type.
- * Pickers return `file://` paths on native, but `data:`/`blob:` URIs on web —
- * the expo-file-system File API only accepts real file paths, so anything else
- * goes through fetch.
+ * Pickers return `file://` paths on native, but `data:`/`blob:` URIs on web.
+ * `fetch` handles all of these on every platform, so it is the primary path;
+ * on native we fall back to the legacy base64 file reader if fetch fails.
+ * The new expo-file-system `File` API is deliberately avoided: it throws
+ * "invalid path" for non-file URIs and "this.validatePath is not a function"
+ * on web.
  */
 async function readAssetBytes(uri: string): Promise<ArrayBuffer> {
-  const isFilePath = uri.startsWith("file://");
-  if (Platform.OS !== "web" && isFilePath) {
+  try {
+    const response = await fetch(uri);
+    const buffer = await response.arrayBuffer();
+    if (buffer.byteLength > 0) return buffer;
+    console.log("[media] fetch returned an empty buffer, trying fallback");
+  } catch (e) {
+    console.log("[media] fetch read failed, trying fallback:", e);
+  }
+
+  if (Platform.OS !== "web") {
     try {
-      return await new File(uri).arrayBuffer();
+      const base64 = await FileSystem.readAsStringAsync(uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      return decode(base64);
     } catch (e) {
-      console.log("[media] File API read failed, falling back to fetch:", e);
+      console.log("[media] legacy file read failed:", e);
     }
   }
-  const response = await fetch(uri);
-  if (!response.ok && response.status !== 0) {
-    throw new Error("Impossible de lire le fichier sélectionné.");
-  }
-  return await response.arrayBuffer();
+
+  throw new Error("Impossible de lire le fichier sélectionné. Réessaie avec une autre image.");
 }
 
 /** Uploads a local asset to the episode-media bucket and returns a public URL. */
