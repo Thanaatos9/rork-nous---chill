@@ -202,15 +202,21 @@ struct CreateSpaceView: View {
         loading = true
         Task {
             do {
-                var coverUrl: String?
-                if let coverData {
-                    coverUrl = try await StorageService.upload(folder: "covers", data: coverData, contentType: "image/jpeg", ext: "jpg")
-                }
-                let space = try await SpaceService.createSpace(
-                    userId: uid, name: name, description: description, coverUrl: coverUrl,
+                // The storage policy only accepts paths starting with a space uuid,
+                // so the space is created first and the cover uploaded under its id.
+                var space = try await SpaceService.createSpace(
+                    userId: uid, name: name, description: description, coverUrl: nil,
                     seasonStart: ISO8601DateFormatter().string(from: start),
                     seasonEnd: ISO8601DateFormatter().string(from: end)
                 )
+                if let coverData {
+                    do {
+                        let coverUrl = try await StorageService.upload(folder: "\(space.id)/covers", data: coverData, contentType: "image/jpeg", ext: "jpg")
+                        space = try await SpaceService.updateCover(id: space.id, coverUrl: coverUrl)
+                    } catch {
+                        toasts.info("Espace créé, mais la couverture n'a pas pu être envoyée. Réessaie depuis les paramètres.")
+                    }
+                }
                 let invite = try? await MemberService.createInvite(
                     spaceId: space.id, userId: uid, role: .member, maxUses: nil, expiresAt: nil
                 )

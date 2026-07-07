@@ -18,7 +18,7 @@ import { friendlyError } from "@/lib/errors";
 import { PickedAsset, pickCoverImage, uploadToBucket } from "@/lib/media";
 import type { Space } from "@/lib/types";
 import { useCreateInviteCode } from "@/hooks/useMembers";
-import { useCreateSpace } from "@/hooks/useSpaces";
+import { useCreateSpace, useUpdateSpace } from "@/hooks/useSpaces";
 import { useToast } from "@/providers/toast";
 
 function addMonths(date: Date, months: number): Date {
@@ -31,6 +31,7 @@ export default function CreateSpaceScreen() {
   const router = useRouter();
   const toast = useToast();
   const createSpace = useCreateSpace();
+  const updateSpace = useUpdateSpace();
   const createInvite = useCreateInviteCode();
 
   const [name, setName] = useState<string>("");
@@ -62,16 +63,26 @@ export default function CreateSpaceScreen() {
     }
     setLoading(true);
     try {
-      let coverUrl: string | null = null;
-      if (cover) coverUrl = await uploadToBucket("covers", cover);
-
+      // The storage policy only accepts paths starting with a space uuid, so
+      // the space is created first and the cover is uploaded under its id.
       const space = await createSpace.mutateAsync({
         name,
         description,
-        coverUrl,
+        coverUrl: null,
         seasonStart: start.toISOString(),
         seasonEnd: end.toISOString(),
       });
+
+      if (cover) {
+        try {
+          const coverUrl = await uploadToBucket(`${space.id}/covers`, cover);
+          const updated = await updateSpace.mutateAsync({ spaceId: space.id, patch: { cover_url: coverUrl } });
+          space.cover_url = updated.cover_url;
+        } catch (coverError) {
+          console.log("[create-space] cover upload failed:", coverError);
+          toast.info("Espace créé, mais la couverture n'a pas pu être envoyée. Réessaie depuis les paramètres.");
+        }
+      }
 
       let code: string | null = null;
       try {

@@ -165,6 +165,11 @@ enum SpaceService {
         ])
     }
 
+    /// Sets only the cover URL. Kept here so views don't need the Supabase JSON types.
+    static func updateCover(id: String, coverUrl: String) async throws -> Space {
+        try await updateSpace(id: id, patch: ["cover_url": .string(coverUrl)])
+    }
+
     static func updateSpace(id: String, patch: [String: AnyJSON]) async throws -> Space {
         try await supabase
             .from("spaces")

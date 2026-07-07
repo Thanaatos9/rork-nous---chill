@@ -133,7 +133,15 @@ struct SettingsView: View {
               let jpeg = image.jpegData(compressionQuality: 0.6) else { return }
         savingAvatar = true
         do {
-            let url = try await StorageService.upload(folder: "avatars", data: jpeg, contentType: "image/jpeg", ext: "jpg")
+            // The storage policy expects a uuid as the first path folder: try the
+            // user id first, then fall back to a space the user belongs to.
+            let url: String
+            do {
+                url = try await StorageService.upload(folder: "\(uid)/avatars", data: jpeg, contentType: "image/jpeg", ext: "jpg")
+            } catch {
+                guard let spaceId = try? await SpaceService.mySpaces(userId: uid).first?.space.id else { throw error }
+                url = try await StorageService.upload(folder: "\(spaceId)/avatars", data: jpeg, contentType: "image/jpeg", ext: "jpg")
+            }
             _ = try await ProfileService.updateAvatar(userId: uid, url: url)
             await app.refreshProfile()
             toasts.success("Photo mise à jour")

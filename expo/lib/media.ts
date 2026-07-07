@@ -102,7 +102,30 @@ async function readAssetBytes(uri: string): Promise<ArrayBuffer> {
   throw new Error("Impossible de lire le fichier sélectionné. Réessaie avec une autre image.");
 }
 
-/** Uploads a local asset to the episode-media bucket and returns a public URL. */
+/**
+ * Uploads a local asset trying several folders in order, returning the first
+ * public URL that succeeds. The storage RLS policy parses the first path
+ * segment as a uuid, so callers provide uuid-prefixed candidate folders.
+ */
+export async function uploadToBucketWithFallback(folders: string[], asset: PickedAsset): Promise<string> {
+  let lastError: unknown = null;
+  for (const folder of folders) {
+    try {
+      return await uploadToBucket(folder, asset);
+    } catch (e) {
+      console.log(`[media] upload to "${folder}" failed:`, e);
+      lastError = e;
+    }
+  }
+  throw lastError ?? new Error("Aucun dossier de destination valide pour l'envoi.");
+}
+
+/**
+ * Uploads a local asset to the episode-media bucket and returns a public URL.
+ * IMPORTANT: the storage security policy expects the FIRST folder of the path
+ * to be a uuid (the space id, or the user id). Passing a plain word like
+ * "covers" fails with: invalid input syntax for type uuid.
+ */
 export async function uploadToBucket(folder: string, asset: PickedAsset): Promise<string> {
   const ext = asset.type === "video" ? "mp4" : asset.mimeType.includes("png") ? "png" : "jpg";
   const path = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;

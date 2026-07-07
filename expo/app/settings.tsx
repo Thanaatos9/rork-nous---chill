@@ -12,9 +12,10 @@ import { FadeIn } from "@/components/ui/motion";
 import { AppText } from "@/components/ui/Text";
 import { colors, radius, spacing } from "@/constants/theme";
 import { friendlyError } from "@/lib/errors";
-import { pickAvatarImage, uploadToBucket } from "@/lib/media";
+import { pickAvatarImage, uploadToBucketWithFallback } from "@/lib/media";
 import { registerPushToken } from "@/lib/push";
 import { useUpdateProfile } from "@/hooks/useProfile";
+import { useMySpaces } from "@/hooks/useSpaces";
 import { useAuth } from "@/providers/auth";
 import { useToast } from "@/providers/toast";
 
@@ -67,6 +68,7 @@ export default function SettingsScreen() {
   const toast = useToast();
   const { profile, user, signOut } = useAuth();
   const updateProfile = useUpdateProfile();
+  const { data: spaces } = useMySpaces();
 
   const [name, setName] = useState<string>(profile?.name ?? "");
   const [bio, setBio] = useState<string>(profile?.bio ?? "");
@@ -101,7 +103,13 @@ export default function SettingsScreen() {
       const asset = await pickAvatarImage();
       if (!asset) return;
       setSavingAvatar(true);
-      const url = await uploadToBucket("avatars", asset);
+      // The storage policy expects a uuid as the first path folder: try the
+      // user id first, then fall back to a space the user belongs to.
+      const folders: string[] = [
+        ...(user?.id ? [`${user.id}/avatars`] : []),
+        ...(spaces?.[0]?.id ? [`${spaces[0].id}/avatars`] : []),
+      ];
+      const url = await uploadToBucketWithFallback(folders, asset);
       await updateProfile.mutateAsync({ avatar_url: url });
       toast.success("Photo mise à jour");
     } catch (e) {

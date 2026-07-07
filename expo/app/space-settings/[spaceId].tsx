@@ -88,7 +88,7 @@ export default function SpaceSettingsScreen() {
     setSaving(true);
     try {
       let coverUrl = space.cover_url;
-      if (newCover) coverUrl = await uploadToBucket("covers", newCover);
+      if (newCover) coverUrl = await uploadToBucket(`${spaceId}/covers`, newCover);
       await updateSpace.mutateAsync({
         spaceId,
         patch: {
