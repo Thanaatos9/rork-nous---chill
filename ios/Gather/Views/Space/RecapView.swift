@@ -7,6 +7,7 @@ struct RecapView: View {
     @Environment(SpaceStore.self) private var store
     @Environment(AppState.self) private var app
     @Environment(ToastCenter.self) private var toasts
+    @Environment(\.dismiss) private var dismiss
 
     @State private var unlocking = false
     @State private var confirmUnlock = false
@@ -33,9 +34,13 @@ struct RecapView: View {
         let status = Season.status(for: space)
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: Spacing.xl) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Bilan de saison").gType(.title)
-                    Text(space.name).gType(.caption)
+                HStack(spacing: Spacing.md) {
+                    IconButton(systemIcon: "chevron.left", size: 40) { dismiss() }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Bilan de saison").gType(.title)
+                        Text(space.name).gType(.caption)
+                    }
+                    Spacer()
                 }
 
                 if !space.unlocked {

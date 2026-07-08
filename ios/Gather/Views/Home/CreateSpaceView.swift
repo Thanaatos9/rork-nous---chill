@@ -13,6 +13,7 @@ struct CreateSpaceView: View {
     @State private var coverItem: PhotosPickerItem?
     @State private var coverImage: UIImage?
     @State private var coverData: Data?
+    @State private var adjusting: AdjustableImage?
     @State private var start = Date()
     @State private var end = Calendar.current.date(byAdding: .month, value: 3, to: Date()) ?? Date()
     @State private var loading = false
@@ -35,9 +36,18 @@ struct CreateSpaceView: View {
             Task {
                 if let data = try? await item.loadTransferable(type: Data.self),
                    let img = UIImage(data: data) {
-                    coverImage = img
-                    coverData = img.jpegData(compressionQuality: 0.6)
+                    adjusting = AdjustableImage(image: img)
                 }
+                coverItem = nil
+            }
+        }
+        .fullScreenCover(item: $adjusting) { adj in
+            ImageAdjustView(image: adj.image, title: "Ajuster la couverture", shape: .cover) {
+                adjusting = nil
+            } onDone: { cropped in
+                coverImage = cropped
+                coverData = cropped.jpegData(compressionQuality: 0.75)
+                adjusting = nil
             }
         }
     }

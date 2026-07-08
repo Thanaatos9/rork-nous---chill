@@ -12,13 +12,15 @@ struct GatherApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var appState = AppState()
     @State private var toasts = ToastCenter()
+    @State private var theme = ThemeStore()
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environment(appState)
                 .environment(toasts)
-                .preferredColorScheme(.dark)
+                .environment(theme)
+                .preferredColorScheme(theme.mode.colorScheme)
                 .tint(Palette.primary)
                 .onOpenURL { url in
                     PushCoordinator.shared.handleDeepLink(url)

@@ -1,44 +1,97 @@
 import SwiftUI
+import UIKit
 
-/// Gather — dark-only, Netflix-inspired theme.
-/// Deep black canvas, contrasted poster cards, vivid red accent, rare gold highlights.
-nonisolated enum Palette {
+/// Gather — Netflix-inspired theme with dark & light palettes.
+/// Every color is a dynamic UIColor resolving per interface style, so the whole
+/// app follows the selected theme (system / light / dark) automatically.
+/// Mirrors expo/constants/theme.ts.
+nonisolated enum PaletteUI {
+    private static func dyn(dark: UInt, light: UInt, darkAlpha: CGFloat = 1, lightAlpha: CGFloat = 1) -> UIColor {
+        UIColor { trait in
+            trait.userInterfaceStyle == .light
+                ? UIColor(hex: light, alpha: lightAlpha)
+                : UIColor(hex: dark, alpha: darkAlpha)
+        }
+    }
+
     // Canvas
-    static let bg = Color(hex: 0x141416)
-    static let bgDeep = Color(hex: 0x0B0B0C)
-    static let bgElevated = Color(hex: 0x1B1B1E)
+    static let bg = dyn(dark: 0x141416, light: 0xF4F4F6)
+    static let bgDeep = dyn(dark: 0x0B0B0C, light: 0xEAEAEE)
+    static let bgElevated = dyn(dark: 0x1B1B1E, light: 0xFFFFFF)
 
     // Surfaces
-    static let card = Color(hex: 0x1C1C1F)
-    static let cardElevated = Color(hex: 0x242428)
-    static let surface = Color(hex: 0x2A2A2E)
+    static let card = dyn(dark: 0x1C1C1F, light: 0xFFFFFF)
+    static let cardElevated = dyn(dark: 0x242428, light: 0xFFFFFF)
+    static let surface = dyn(dark: 0x2A2A2E, light: 0xEBEBEF)
 
     // Lines
-    static let border = Color(hex: 0x303034)
-    static let borderStrong = Color(hex: 0x3D3D42)
+    static let border = dyn(dark: 0x303034, light: 0xE2E2E8)
+    static let borderStrong = dyn(dark: 0x3D3D42, light: 0xCFCFD7)
 
     // Text
-    static let text = Color(hex: 0xF7F7F7)
-    static let textMuted = Color(hex: 0x9B9BA2)
-    static let textFaint = Color(hex: 0x67676E)
+    static let text = dyn(dark: 0xF7F7F7, light: 0x1B1B1F)
+    static let textMuted = dyn(dark: 0x9B9BA2, light: 0x6E6E77)
+    static let textFaint = dyn(dark: 0x67676E, light: 0x9B9BA3)
 
     // Brand
-    static let primary = Color(hex: 0xEF233C)
-    static let primaryDark = Color(hex: 0xC2182C)
-    static let primarySoft = Color(hex: 0xEF233C).opacity(0.14)
+    static let primary = dyn(dark: 0xEF233C, light: 0xE11D33)
+    static let primaryDark = dyn(dark: 0xC2182C, light: 0xB9152A)
+    static let primarySoft = dyn(dark: 0xEF233C, light: 0xE11D33, darkAlpha: 0.14, lightAlpha: 0.10)
+
+    // Highlights
+    static let accent = dyn(dark: 0xCDBE57, light: 0xA8912E)
+    static let accentSoft = dyn(dark: 0xCDBE57, light: 0xA8912E, darkAlpha: 0.16, lightAlpha: 0.14)
+
+    // Status
+    static let success = dyn(dark: 0x3DD27E, light: 0x1FA85D)
+    static let successSoft = dyn(dark: 0x3DD27E, light: 0x1FA85D, darkAlpha: 0.14, lightAlpha: 0.12)
+    static let warning = dyn(dark: 0xE8A13A, light: 0xC97F16)
+    static let destructive = dyn(dark: 0xE63946, light: 0xD62839)
+    static let destructiveSoft = dyn(dark: 0xE63946, light: 0xD62839, darkAlpha: 0.16, lightAlpha: 0.10)
+
+    // Shadows — soften automatically on the light theme.
+    static let shadowPoster = dyn(dark: 0x000000, light: 0x000000, darkAlpha: 0.55, lightAlpha: 0.16)
+    static let shadowCard = dyn(dark: 0x000000, light: 0x000000, darkAlpha: 0.4, lightAlpha: 0.08)
+    static let glow = dyn(dark: 0xEF233C, light: 0xE11D33, darkAlpha: 0.45, lightAlpha: 0.3)
+}
+
+nonisolated enum Palette {
+    // Canvas
+    static let bg = Color(uiColor: PaletteUI.bg)
+    static let bgDeep = Color(uiColor: PaletteUI.bgDeep)
+    static let bgElevated = Color(uiColor: PaletteUI.bgElevated)
+
+    // Surfaces
+    static let card = Color(uiColor: PaletteUI.card)
+    static let cardElevated = Color(uiColor: PaletteUI.cardElevated)
+    static let surface = Color(uiColor: PaletteUI.surface)
+
+    // Lines
+    static let border = Color(uiColor: PaletteUI.border)
+    static let borderStrong = Color(uiColor: PaletteUI.borderStrong)
+
+    // Text
+    static let text = Color(uiColor: PaletteUI.text)
+    static let textMuted = Color(uiColor: PaletteUI.textMuted)
+    static let textFaint = Color(uiColor: PaletteUI.textFaint)
+
+    // Brand
+    static let primary = Color(uiColor: PaletteUI.primary)
+    static let primaryDark = Color(uiColor: PaletteUI.primaryDark)
+    static let primarySoft = Color(uiColor: PaletteUI.primarySoft)
     static let primaryFg = Color.white
 
     // Highlights
-    static let accent = Color(hex: 0xCDBE57)
-    static let accentSoft = Color(hex: 0xCDBE57).opacity(0.16)
+    static let accent = Color(uiColor: PaletteUI.accent)
+    static let accentSoft = Color(uiColor: PaletteUI.accentSoft)
     static let goldFg = Color(hex: 0x1A1607)
 
     // Status
-    static let success = Color(hex: 0x3DD27E)
-    static let successSoft = Color(hex: 0x3DD27E).opacity(0.14)
-    static let warning = Color(hex: 0xE8A13A)
-    static let destructive = Color(hex: 0xE63946)
-    static let destructiveSoft = Color(hex: 0xE63946).opacity(0.16)
+    static let success = Color(uiColor: PaletteUI.success)
+    static let successSoft = Color(uiColor: PaletteUI.successSoft)
+    static let warning = Color(uiColor: PaletteUI.warning)
+    static let destructive = Color(uiColor: PaletteUI.destructive)
+    static let destructiveSoft = Color(uiColor: PaletteUI.destructiveSoft)
 }
 
 nonisolated enum Radius {
@@ -128,10 +181,14 @@ extension View {
 // MARK: - Shadows
 
 extension View {
-    func posterShadow() -> some View { shadow(color: .black.opacity(0.55), radius: 22, x: 0, y: 16) }
-    func cardShadow() -> some View { shadow(color: .black.opacity(0.4), radius: 13, x: 0, y: 8) }
+    func posterShadow() -> some View {
+        shadow(color: Color(uiColor: PaletteUI.shadowPoster), radius: 22, x: 0, y: 16)
+    }
+    func cardShadow() -> some View {
+        shadow(color: Color(uiColor: PaletteUI.shadowCard), radius: 13, x: 0, y: 8)
+    }
     func glowShadow(_ active: Bool = true) -> some View {
-        shadow(color: active ? Palette.primary.opacity(0.45) : .clear, radius: active ? 18 : 0)
+        shadow(color: active ? Color(uiColor: PaletteUI.glow) : .clear, radius: active ? 18 : 0)
     }
 }
 
@@ -145,6 +202,17 @@ extension Color {
             green: Double((hex >> 8) & 0xFF) / 255,
             blue: Double(hex & 0xFF) / 255,
             opacity: alpha
+        )
+    }
+}
+
+extension UIColor {
+    convenience init(hex: UInt, alpha: CGFloat = 1) {
+        self.init(
+            red: CGFloat((hex >> 16) & 0xFF) / 255,
+            green: CGFloat((hex >> 8) & 0xFF) / 255,
+            blue: CGFloat(hex & 0xFF) / 255,
+            alpha: alpha
         )
     }
 }

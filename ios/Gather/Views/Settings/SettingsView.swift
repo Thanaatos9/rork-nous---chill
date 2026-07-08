@@ -11,6 +11,7 @@ struct SettingsView: View {
     @State private var bio = ""
     @State private var hydrated = false
     @State private var avatarItem: PhotosPickerItem?
+    @State private var adjustingAvatar: AdjustableImage?
     @State private var savingAvatar = false
     @State private var saving = false
     @State private var confirmSignOut = false
@@ -32,6 +33,8 @@ struct SettingsView: View {
                         GatherCard {
                             VStack(spacing: 0) {
                                 PushToggle()
+                                Divider().overlay(Palette.border).padding(.vertical, Spacing.md)
+                                ThemePickerRow()
                                 Divider().overlay(Palette.border).padding(.vertical, Spacing.md)
                                 tutorialRow
                             }
@@ -84,7 +87,21 @@ struct SettingsView: View {
         }
         .onChange(of: avatarItem) { _, item in
             guard let item else { return }
-            Task { await changeAvatar(item) }
+            Task {
+                if let data = try? await item.loadTransferable(type: Data.self),
+                   let image = UIImage(data: data) {
+                    adjustingAvatar = AdjustableImage(image: image)
+                }
+                avatarItem = nil
+            }
+        }
+        .fullScreenCover(item: $adjustingAvatar) { adj in
+            ImageAdjustView(image: adj.image, title: "Ajuster ta photo", shape: .circle) {
+                adjustingAvatar = nil
+            } onDone: { cropped in
+                adjustingAvatar = nil
+                Task { await changeAvatar(cropped) }
+            }
         }
         .fullScreenCover(isPresented: $showTutorial) {
             OnboardingView()
@@ -153,11 +170,9 @@ struct SettingsView: View {
         }
     }
 
-    private func changeAvatar(_ item: PhotosPickerItem) async {
+    private func changeAvatar(_ image: UIImage) async {
         guard let uid = app.userId,
-              let data = try? await item.loadTransferable(type: Data.self),
-              let image = UIImage(data: data),
-              let jpeg = image.jpegData(compressionQuality: 0.6) else { return }
+              let jpeg = image.jpegData(compressionQuality: 0.75) else { return }
         savingAvatar = true
         do {
             // The uploader probes the storage rules for an accepted path format
@@ -174,6 +189,53 @@ struct SettingsView: View {
             toasts.error(FriendlyError.message(error))
         }
         savingAvatar = false
+    }
+}
+
+/// Theme selector: follow the phone, or force light/dark. Mirrors the Expo settings row.
+private struct ThemePickerRow: View {
+    @Environment(ThemeStore.self) private var theme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            HStack(spacing: Spacing.md) {
+                Image(systemName: "circle.lefthalf.filled").font(.system(size: 18)).foregroundStyle(Palette.text)
+                    .frame(width: 40, height: 40).background(Palette.surface, in: Circle())
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Thème").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text)
+                    Text("Suis le téléphone ou choisis clair / sombre").gType(.caption)
+                }
+                Spacer()
+            }
+            HStack(spacing: 6) {
+                ForEach(ThemeMode.allCases, id: \.rawValue) { mode in
+                    themeChip(mode)
+                }
+            }
+        }
+    }
+
+    private func themeChip(_ mode: ThemeMode) -> some View {
+        let active = theme.mode == mode
+        return Button {
+            withAnimation(.easeOut(duration: 0.2)) { theme.mode = mode }
+            Haptics.light()
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: mode.systemIcon).font(.system(size: 12, weight: .semibold))
+                Text(mode.label).font(.system(size: 13, weight: .semibold))
+            }
+            .foregroundStyle(active ? Palette.primary : Palette.textMuted)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 9)
+            .background(active ? Palette.primarySoft : Palette.surface,
+                        in: RoundedRectangle(cornerRadius: Radius.sm, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
+                    .stroke(active ? Palette.primary : .clear, lineWidth: 1)
+            )
+        }
+        .buttonStyle(PressableStyle(scale: 0.96, haptic: false))
     }
 }
 

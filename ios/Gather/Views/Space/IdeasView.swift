@@ -4,6 +4,7 @@ struct IdeasView: View {
     @Environment(SpaceStore.self) private var store
     @Environment(AppState.self) private var app
     @Environment(ToastCenter.self) private var toasts
+    @Environment(\.dismiss) private var dismiss
 
     @State private var composing = false
     @State private var title = ""
@@ -57,7 +58,8 @@ struct IdeasView: View {
     }
 
     private var header: some View {
-        HStack {
+        HStack(spacing: Spacing.md) {
+            IconButton(systemIcon: "chevron.left", size: 40) { dismiss() }
             VStack(alignment: .leading, spacing: 2) {
                 Text("Idées").gType(.title)
                 Text("Vos prochaines aventures, votées ensemble").gType(.caption)

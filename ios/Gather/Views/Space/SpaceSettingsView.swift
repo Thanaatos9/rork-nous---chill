@@ -17,6 +17,7 @@ struct SpaceSettingsView: View {
     @State private var coverItem: PhotosPickerItem?
     @State private var coverImage: UIImage?
     @State private var coverData: Data?
+    @State private var adjusting: AdjustableImage?
     @State private var hydrated = false
     @State private var saving = false
     @State private var deleting = false
@@ -36,9 +37,18 @@ struct SpaceSettingsView: View {
             guard let item else { return }
             Task {
                 if let data = try? await item.loadTransferable(type: Data.self), let img = UIImage(data: data) {
-                    coverImage = img
-                    coverData = img.jpegData(compressionQuality: 0.6)
+                    adjusting = AdjustableImage(image: img)
                 }
+                coverItem = nil
+            }
+        }
+        .fullScreenCover(item: $adjusting) { adj in
+            ImageAdjustView(image: adj.image, title: "Ajuster la couverture", shape: .cover) {
+                adjusting = nil
+            } onDone: { cropped in
+                coverImage = cropped
+                coverData = cropped.jpegData(compressionQuality: 0.75)
+                adjusting = nil
             }
         }
         .alert("Supprimer l'espace ?", isPresented: $confirmDelete) {

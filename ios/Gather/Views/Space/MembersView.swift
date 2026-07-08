@@ -4,6 +4,7 @@ struct MembersView: View {
     @Environment(SpaceStore.self) private var store
     @Environment(AppState.self) private var app
     @Environment(ToastCenter.self) private var toasts
+    @Environment(\.dismiss) private var dismiss
 
     @State private var invites: [InviteCode] = []
     @State private var composingInvite = false
@@ -14,9 +15,13 @@ struct MembersView: View {
             ScreenBackground()
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: Spacing.md) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Membres").gType(.title)
-                        Text("\(store.members.count) personne\(store.members.count > 1 ? "s" : "") dans l'aventure").gType(.caption)
+                    HStack(spacing: Spacing.md) {
+                        IconButton(systemIcon: "chevron.left", size: 40) { dismiss() }
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Membres").gType(.title)
+                            Text("\(store.members.count) personne\(store.members.count > 1 ? "s" : "") dans l'aventure").gType(.caption)
+                        }
+                        Spacer()
                     }
                     .padding(.bottom, Spacing.xs)
 

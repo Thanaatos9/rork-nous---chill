@@ -3,6 +3,7 @@ import SwiftUI
 struct EpisodesView: View {
     @Environment(SpaceStore.self) private var store
     @Environment(AppState.self) private var app
+    @Environment(\.dismiss) private var dismiss
 
     enum Mode { case grid, timeline }
     @State private var mode: Mode = .grid
@@ -69,7 +70,8 @@ struct EpisodesView: View {
     }
 
     private var header: some View {
-        HStack(alignment: .center) {
+        HStack(alignment: .center, spacing: Spacing.md) {
+            IconButton(systemIcon: "chevron.left", size: 40) { dismiss() }
             VStack(alignment: .leading, spacing: 2) {
                 Text("Épisodes").gType(.title)
                 Text("\(store.episodes.count) moment\(store.episodes.count > 1 ? "s" : "") vécu\(store.episodes.count > 1 ? "s" : "")").gType(.caption)

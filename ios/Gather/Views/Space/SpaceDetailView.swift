@@ -52,10 +52,10 @@ struct SpaceDetailView: View {
     private static func configureTabBarAppearance() {
         let appearance = UITabBarAppearance()
         appearance.configureWithOpaqueBackground()
-        appearance.backgroundColor = UIColor(Palette.bgDeep)
-        appearance.shadowColor = UIColor(Palette.border)
-        let normal = UIColor(Palette.textFaint)
-        let selected = UIColor(Palette.primary)
+        appearance.backgroundColor = PaletteUI.bgDeep
+        appearance.shadowColor = PaletteUI.border
+        let normal = PaletteUI.textFaint
+        let selected = PaletteUI.primary
         appearance.stackedLayoutAppearance.normal.iconColor = normal
         appearance.stackedLayoutAppearance.normal.titleTextAttributes = [.foregroundColor: normal]
         appearance.stackedLayoutAppearance.selected.iconColor = selected
