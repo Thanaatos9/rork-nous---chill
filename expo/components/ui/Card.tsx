@@ -3,7 +3,7 @@ import React from "react";
 import { StatusBar } from "expo-status-bar";
 import { ScrollView, StyleProp, View, ViewProps, ViewStyle } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { colors, radius, shadows, spacing } from "@/constants/theme";
+import { colors, currentScheme, radius, shadows, spacing } from "@/constants/theme";
 import { AppText } from "./Text";
 
 interface CardProps extends ViewProps {
@@ -51,7 +51,7 @@ export function Screen({
 }) {
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      <StatusBar style="light" />
+      <StatusBar style={currentScheme() === "dark" ? "light" : "dark"} />
       <LinearGradient
         colors={[colors.bgDeep, colors.bg, colors.bg]}
         locations={[0, 0.4, 1]}

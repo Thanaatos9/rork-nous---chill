@@ -1,8 +1,9 @@
+import * as Haptics from "expo-haptics";
 import * as Notifications from "expo-notifications";
 import { useRouter } from "expo-router";
-import { Bell, Camera, ChevronRight, GraduationCap, LogOut, Info } from "lucide-react-native";
+import { Bell, Camera, ChevronRight, GraduationCap, LogOut, Info, Moon, Palette, Smartphone, Sun } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
-import { Alert, Switch, TouchableOpacity, View } from "react-native";
+import { Alert, Platform, Switch, TouchableOpacity, View } from "react-native";
 import { AppHeader } from "@/components/AppHeader";
 import { CoverAdjustModal } from "@/components/CoverAdjustModal";
 import { Avatar } from "@/components/ui/Avatar";
@@ -18,6 +19,7 @@ import { registerPushToken } from "@/lib/push";
 import { useUpdateProfile } from "@/hooks/useProfile";
 import { useMySpaces } from "@/hooks/useSpaces";
 import { useAuth } from "@/providers/auth";
+import { ThemeMode, useThemeMode } from "@/providers/theme";
 import { useToast } from "@/providers/toast";
 
 function PushToggle() {
@@ -60,6 +62,63 @@ function PushToggle() {
         <AppText variant="caption">Épisodes, commentaires, déverrouillages</AppText>
       </View>
       <Switch value={enabled} onValueChange={onToggle} trackColor={{ false: colors.surface, true: colors.primary }} thumbColor="#fff" ios_backgroundColor={colors.surface} />
+    </View>
+  );
+}
+
+const THEME_OPTIONS: { value: ThemeMode; label: string; Icon: typeof Sun }[] = [
+  { value: "system", label: "Système", Icon: Smartphone },
+  { value: "light", label: "Clair", Icon: Sun },
+  { value: "dark", label: "Sombre", Icon: Moon },
+];
+
+function ThemeSelector() {
+  const { mode, setMode } = useThemeMode();
+
+  const onSelect = (next: ThemeMode) => {
+    if (next === mode) return;
+    if (Platform.OS !== "web") Haptics.selectionAsync().catch(() => {});
+    setMode(next);
+  };
+
+  return (
+    <View style={{ gap: spacing.md }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.md }}>
+        <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" }}>
+          <Palette size={18} color={colors.text} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <AppText style={{ fontWeight: "600", fontSize: 15, color: colors.text }}>Thème</AppText>
+          <AppText variant="caption">Suis ton téléphone, ou force clair / sombre</AppText>
+        </View>
+      </View>
+      <View style={{ flexDirection: "row", backgroundColor: colors.surface, borderRadius: radius.md, padding: 4, gap: 4 }}>
+        {THEME_OPTIONS.map(({ value, label, Icon }) => {
+          const selected = mode === value;
+          return (
+            <TouchableOpacity
+              key={value}
+              onPress={() => onSelect(value)}
+              activeOpacity={0.8}
+              style={{
+                flex: 1,
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 6,
+                paddingVertical: 9,
+                borderRadius: radius.sm,
+                backgroundColor: selected ? colors.cardElevated : "transparent",
+                borderWidth: 1,
+                borderColor: selected ? colors.primary : "transparent",
+              }}
+            >
+              <Icon size={15} color={selected ? colors.primary : colors.textMuted} />
+              <AppText style={{ fontSize: 13, fontWeight: "700", color: selected ? colors.text : colors.textMuted }}>{label}</AppText>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
     </View>
   );
 }
@@ -164,6 +223,8 @@ export default function SettingsScreen() {
       <View style={{ marginTop: spacing.xxl }}>
         <SectionHeader title="Préférences" />
         <Card style={{ gap: spacing.lg }}>
+          <ThemeSelector />
+          <Divider />
           <PushToggle />
           <Divider />
           <TouchableOpacity

@@ -3,7 +3,7 @@ import { CircleAlert, CircleCheck, Info } from "lucide-react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Animated, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { colors, radius, shadows, spacing } from "@/constants/theme";
+import { colors, currentScheme, radius, shadows, spacing } from "@/constants/theme";
 import { AppText } from "@/components/ui/Text";
 import { notify } from "@/components/ui/motion";
 import * as Haptics from "expo-haptics";
@@ -55,11 +55,12 @@ export function ToastViewport() {
 
   if (!visible) return null;
 
+  const isDark = currentScheme() === "dark";
   const tone =
     visible.type === "success"
-      ? { color: colors.success, bg: "#16271D", Icon: CircleCheck }
+      ? { color: colors.success, bg: isDark ? "#16271D" : "#E4F5EB", Icon: CircleCheck }
       : visible.type === "error"
-      ? { color: colors.destructive, bg: "#2A1718", Icon: CircleAlert }
+      ? { color: colors.destructive, bg: isDark ? "#2A1718" : "#FBE9EB", Icon: CircleAlert }
       : { color: colors.text, bg: colors.cardElevated, Icon: Info };
 
   const translateY = anim.interpolate({ inputRange: [0, 1], outputRange: [-24, 0] });

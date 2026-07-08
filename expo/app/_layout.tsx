@@ -15,12 +15,14 @@ import { queryClient } from "@/lib/queryClient";
 import { setPendingInvite } from "@/lib/pendingInvite";
 import { AuthProvider, useAuth } from "@/providers/auth";
 import { NotificationsProvider } from "@/providers/notifications";
+import { ThemeProvider, useThemeMode } from "@/providers/theme";
 import { ToastProvider, ToastViewport } from "@/providers/toast";
 
 SplashScreen.preventAutoHideAsync();
 
 function RootNav() {
   const { isAuthenticated, initializing } = useAuth();
+  const { resolved } = useThemeMode();
   const segments = useSegments();
   const router = useRouter();
   const [splashVisible, setSplashVisible] = useState<boolean>(true);
@@ -55,7 +57,9 @@ function RootNav() {
   }, [isAuthenticated, router]);
 
   return (
-    <>
+    // Remounting on scheme change lets every inline style pick up the new palette.
+    <View key={`theme-${resolved}`} style={{ flex: 1, backgroundColor: colors.bg }}>
+      <StatusBar style={resolved === "dark" ? "light" : "dark"} />
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}>
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="index" />
@@ -73,7 +77,7 @@ function RootNav() {
       {splashVisible ? (
         <BrandSplash done={!initializing} onHidden={() => setSplashVisible(false)} />
       ) : null}
-    </>
+    </View>
   );
 }
 
@@ -111,19 +115,20 @@ export default function RootLayout() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <SafeAreaProvider>
-          <AuthProvider>
-            <ToastProvider>
-              <NotificationsProvider>
-                <StatusBar style="light" />
-                <RootNav />
-                <ToastViewport />
-              </NotificationsProvider>
-            </ToastProvider>
-          </AuthProvider>
-        </SafeAreaProvider>
-      </GestureHandlerRootView>
+      <ThemeProvider>
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <SafeAreaProvider>
+            <AuthProvider>
+              <ToastProvider>
+                <NotificationsProvider>
+                  <RootNav />
+                  <ToastViewport />
+                </NotificationsProvider>
+              </ToastProvider>
+            </AuthProvider>
+          </SafeAreaProvider>
+        </GestureHandlerRootView>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }

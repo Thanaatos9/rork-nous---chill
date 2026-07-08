@@ -1,10 +1,13 @@
 import { Platform, TextStyle, ViewStyle } from "react-native";
 
 /**
- * Gather — dark-only, Netflix-inspired theme.
- * Deep black canvas, contrasted poster cards, vivid red accent, rare gold highlights.
+ * Gather — Netflix-inspired theme with dark & light palettes.
+ * The exported `colors` object is mutable: `applyPalette()` swaps every value
+ * in place so all inline styles pick up the active theme on re-render.
  */
-export const colors = {
+export type ThemeScheme = "dark" | "light";
+
+const darkColors = {
   // Canvas
   bg: "#141416",
   bgDeep: "#0B0B0C",
@@ -46,7 +49,69 @@ export const colors = {
   scrim: "rgba(10,10,12,0.92)",
   white: "#FFFFFF",
   black: "#000000",
-} as const;
+};
+
+export type Palette = { [K in keyof typeof darkColors]: string };
+
+const lightColors: Palette = {
+  // Canvas
+  bg: "#F4F4F6",
+  bgDeep: "#EAEAEE",
+  bgElevated: "#FFFFFF",
+
+  // Surfaces
+  card: "#FFFFFF",
+  cardElevated: "#FFFFFF",
+  surface: "#EBEBEF",
+
+  // Lines
+  border: "#E2E2E8",
+  borderStrong: "#CFCFD7",
+
+  // Text
+  text: "#1B1B1F",
+  textMuted: "#6E6E77",
+  textFaint: "#9B9BA3",
+
+  // Brand
+  primary: "#E11D33",
+  primaryDark: "#B9152A",
+  primarySoft: "rgba(225,29,51,0.10)",
+  primaryFg: "#FFFFFF",
+
+  // Highlights
+  accent: "#A8912E",
+  accentSoft: "rgba(168,145,46,0.14)",
+
+  // Status
+  success: "#1FA85D",
+  successSoft: "rgba(31,168,93,0.12)",
+  warning: "#C97F16",
+  destructive: "#D62839",
+  destructiveSoft: "rgba(214,40,57,0.10)",
+
+  // Misc
+  overlay: "rgba(15,15,20,0.45)",
+  scrim: "rgba(20,20,24,0.88)",
+  white: "#FFFFFF",
+  black: "#000000",
+};
+
+/** Mutable palette — values are swapped in place when the theme changes. */
+export const colors: Palette = { ...darkColors };
+
+let scheme: ThemeScheme = "dark";
+
+/** Swaps every color value in place for the given scheme. */
+export function applyPalette(next: ThemeScheme): void {
+  scheme = next;
+  Object.assign(colors, next === "dark" ? darkColors : lightColors);
+}
+
+/** The scheme currently applied to `colors`. */
+export function currentScheme(): ThemeScheme {
+  return scheme;
+}
 
 export const radius = {
   sm: 8,
@@ -74,93 +139,74 @@ export const fonts = {
   family: fontFamily,
 } as const;
 
+/** Getter-based so text colors always follow the active palette. */
 export const type = {
-  display: {
-    fontSize: 34,
-    lineHeight: 38,
-    fontWeight: "800" as const,
-    letterSpacing: -0.8,
-    color: colors.text,
-  } satisfies TextStyle,
-  title: {
-    fontSize: 26,
-    lineHeight: 30,
-    fontWeight: "800" as const,
-    letterSpacing: -0.6,
-    color: colors.text,
-  } satisfies TextStyle,
-  h2: {
-    fontSize: 20,
-    lineHeight: 25,
-    fontWeight: "700" as const,
-    letterSpacing: -0.3,
-    color: colors.text,
-  } satisfies TextStyle,
-  h3: {
-    fontSize: 17,
-    lineHeight: 22,
-    fontWeight: "700" as const,
-    letterSpacing: -0.2,
-    color: colors.text,
-  } satisfies TextStyle,
-  body: {
-    fontSize: 15,
-    lineHeight: 21,
-    fontWeight: "500" as const,
-    color: colors.text,
-  } satisfies TextStyle,
-  bodyMuted: {
-    fontSize: 15,
-    lineHeight: 21,
-    fontWeight: "500" as const,
-    color: colors.textMuted,
-  } satisfies TextStyle,
-  label: {
-    fontSize: 13,
-    lineHeight: 17,
-    fontWeight: "600" as const,
-    color: colors.textMuted,
-  } satisfies TextStyle,
-  caption: {
-    fontSize: 12,
-    lineHeight: 15,
-    fontWeight: "600" as const,
-    letterSpacing: 0.2,
-    color: colors.textFaint,
-  } satisfies TextStyle,
-  overline: {
-    fontSize: 11,
-    lineHeight: 14,
-    fontWeight: "700" as const,
-    letterSpacing: 1.4,
-    textTransform: "uppercase" as const,
-    color: colors.textFaint,
-  } satisfies TextStyle,
-} as const;
+  get display(): TextStyle {
+    return { fontSize: 34, lineHeight: 38, fontWeight: "800" as const, letterSpacing: -0.8, color: colors.text };
+  },
+  get title(): TextStyle {
+    return { fontSize: 26, lineHeight: 30, fontWeight: "800" as const, letterSpacing: -0.6, color: colors.text };
+  },
+  get h2(): TextStyle {
+    return { fontSize: 20, lineHeight: 25, fontWeight: "700" as const, letterSpacing: -0.3, color: colors.text };
+  },
+  get h3(): TextStyle {
+    return { fontSize: 17, lineHeight: 22, fontWeight: "700" as const, letterSpacing: -0.2, color: colors.text };
+  },
+  get body(): TextStyle {
+    return { fontSize: 15, lineHeight: 21, fontWeight: "500" as const, color: colors.text };
+  },
+  get bodyMuted(): TextStyle {
+    return { fontSize: 15, lineHeight: 21, fontWeight: "500" as const, color: colors.textMuted };
+  },
+  get label(): TextStyle {
+    return { fontSize: 13, lineHeight: 17, fontWeight: "600" as const, color: colors.textMuted };
+  },
+  get caption(): TextStyle {
+    return { fontSize: 12, lineHeight: 15, fontWeight: "600" as const, letterSpacing: 0.2, color: colors.textFaint };
+  },
+  get overline(): TextStyle {
+    return {
+      fontSize: 11,
+      lineHeight: 14,
+      fontWeight: "700" as const,
+      letterSpacing: 1.4,
+      textTransform: "uppercase" as const,
+      color: colors.textFaint,
+    };
+  },
+};
 
+/** Getter-based so shadows soften automatically on the light theme. */
 export const shadows = {
-  poster: {
-    shadowColor: "#000000",
-    shadowOpacity: 0.55,
-    shadowRadius: 26,
-    shadowOffset: { width: 0, height: 16 },
-    elevation: 14,
-  } satisfies ViewStyle,
-  card: {
-    shadowColor: "#000000",
-    shadowOpacity: 0.4,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 8,
-  } satisfies ViewStyle,
-  glow: {
-    shadowColor: colors.primary,
-    shadowOpacity: 0.5,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 10,
-  } satisfies ViewStyle,
-} as const;
+  get poster(): ViewStyle {
+    return {
+      shadowColor: "#000000",
+      shadowOpacity: scheme === "dark" ? 0.55 : 0.16,
+      shadowRadius: 26,
+      shadowOffset: { width: 0, height: 16 },
+      elevation: scheme === "dark" ? 14 : 6,
+    };
+  },
+  get card(): ViewStyle {
+    return {
+      shadowColor: "#000000",
+      shadowOpacity: scheme === "dark" ? 0.4 : 0.08,
+      shadowRadius: 14,
+      shadowOffset: { width: 0, height: 8 },
+      elevation: scheme === "dark" ? 8 : 3,
+    };
+  },
+  get glow(): ViewStyle {
+    return {
+      shadowColor: colors.primary,
+      shadowOpacity: scheme === "dark" ? 0.5 : 0.3,
+      shadowRadius: 18,
+      shadowOffset: { width: 0, height: 0 },
+      elevation: 10,
+    };
+  },
+};
 
 export const theme = { colors, radius, spacing, type, shadows, fonts } as const;
 export type Theme = typeof theme;
