@@ -72,6 +72,41 @@ final class AppState {
         try await supabase.auth.resend(email: email.trimmed, type: .signup)
     }
 
+    // MARK: - Social sign-in
+
+    /// Native Sign in with Apple. `nonce` is the RAW nonce (its SHA256 hash was
+    /// sent in the authorization request). Apple returns the user's name only on
+    /// the first sign-in — persist it to user metadata so the profile is named.
+    func signInWithApple(idToken: String, nonce: String, fullName: PersonNameComponents?) async throws {
+        try await supabase.auth.signInWithIdToken(
+            credentials: .init(provider: .apple, idToken: idToken, nonce: nonce)
+        )
+        guard let fullName else { return }
+        let name = [fullName.givenName, fullName.familyName]
+            .compactMap { $0 }
+            .joined(separator: " ")
+            .trimmed
+        guard !name.isEmpty, let uid = userId else { return }
+        // Apple only hands over the name on the very first sign-in — persist it to
+        // both the auth metadata (future logins) and the profile row (display).
+        try? await supabase.auth.update(
+            user: UserAttributes(data: ["name": .string(name), "full_name": .string(name)])
+        )
+        try? await supabase
+            .from("profiles")
+            .upsert(["id": AnyJSON.string(uid), "name": .string(name)], onConflict: "id")
+            .execute()
+        await loadProfile()
+    }
+
+    /// Google sign-in through Supabase social OAuth (ASWebAuthenticationSession).
+    func signInWithGoogle() async throws {
+        try await supabase.auth.signInWithOAuth(
+            provider: .google,
+            redirectTo: URL(string: "rork-app://auth-callback")
+        )
+    }
+
     func signOut() async {
         PushCoordinator.shared.setUser(nil)
         try? await supabase.auth.signOut()

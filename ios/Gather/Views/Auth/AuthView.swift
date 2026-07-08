@@ -76,6 +76,8 @@ private struct LoginForm: View {
                         .buttonStyle(.plain)
                     }
                     GatherButton("Se connecter", size: .lg, loading: loading, fullWidth: true, action: submit)
+
+                    SocialSignInButtons()
                 }
             }
 
@@ -180,6 +182,8 @@ private struct SignupForm: View {
                                         autocorrection: false)
                     }
                     GatherButton("Créer mon compte", size: .lg, loading: loading, fullWidth: true, action: submit)
+
+                    SocialSignInButtons(inviteCode: inviteCode.trimmed.isEmpty ? nil : inviteCode)
                 }
             }
 

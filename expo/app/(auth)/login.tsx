@@ -4,6 +4,7 @@ import { useState } from "react";
 import { TouchableOpacity, View } from "react-native";
 import { AuthScaffold } from "@/components/AuthScaffold";
 import { BrandMark, Wordmark } from "@/components/Brand";
+import { SocialAuthButtons } from "@/components/SocialAuthButtons";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Field, Input } from "@/components/ui/Input";
@@ -108,6 +109,8 @@ export default function LoginScreen() {
           ) : null}
 
           <Button title="Se connecter" onPress={onSubmit} loading={loading} size="lg" fullWidth />
+
+          <SocialAuthButtons />
         </Card>
       </FadeIn>
 

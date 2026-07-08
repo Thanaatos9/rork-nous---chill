@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { TouchableOpacity, View } from "react-native";
 import { AuthScaffold } from "@/components/AuthScaffold";
 import { BrandMark, Wordmark } from "@/components/Brand";
+import { SocialAuthButtons } from "@/components/SocialAuthButtons";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -164,6 +165,8 @@ export default function SignupScreen() {
           </Field>
 
           <Button title="Créer mon compte" onPress={onSubmit} loading={loading} size="lg" fullWidth />
+
+          <SocialAuthButtons inviteCode={inviteCode.trim() || undefined} />
         </Card>
       </FadeIn>
 

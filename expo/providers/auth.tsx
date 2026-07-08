@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Session, User } from "@supabase/supabase-js";
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { signInWithOAuthProvider, type OAuthProvider } from "@/lib/oauth";
 import { setPendingInvite } from "@/lib/pendingInvite";
 import { unregisterPushToken } from "@/lib/push";
 import type { Profile } from "@/lib/types";
@@ -87,6 +88,19 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     if (error) throw error;
   }, []);
 
+  /**
+   * Google / Apple sign-in via Supabase social OAuth. Persists a pending invite
+   * first so it is redeemed after the (possibly new) account lands. Returns
+   * `true` when a session was created, `false` when the user cancelled.
+   */
+  const signInWithProvider = useCallback(
+    async (provider: OAuthProvider, inviteCode?: string | null): Promise<boolean> => {
+      if (inviteCode?.trim()) await setPendingInvite(inviteCode);
+      return signInWithOAuthProvider(provider);
+    },
+    [],
+  );
+
   const signOut = useCallback(async () => {
     if (userId) {
       try {
@@ -108,6 +122,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     profileLoading: profileQuery.isLoading,
     signIn,
     signUp,
+    signInWithProvider,
     signOut,
     resendConfirmation,
     refetchProfile: profileQuery.refetch,
