@@ -11,6 +11,7 @@ import { BrandSplash } from "@/components/BrandSplash";
 import { AppText } from "@/components/ui/Text";
 import { colors, spacing } from "@/constants/theme";
 import { hasSupabaseConfig } from "@/lib/supabase";
+import { registerServiceWorker } from "@/lib/pwa";
 import { queryClient } from "@/lib/queryClient";
 import { setPendingInvite } from "@/lib/pendingInvite";
 import { AuthProvider, useAuth } from "@/providers/auth";
@@ -103,6 +104,11 @@ function ConfigMissing() {
 }
 
 export default function RootLayout() {
+  // Installability + offline shell on web. No-op on native.
+  useEffect(() => {
+    registerServiceWorker();
+  }, []);
+
   if (!hasSupabaseConfig) {
     return (
       <GestureHandlerRootView style={{ flex: 1 }}>

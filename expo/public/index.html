@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <title>Gather</title>
+    <meta
+      name="description"
+      content="Capture tes épisodes, invite tes proches et revis chaque saison de ta vie avec Gather."
+    />
+
+    <!-- PWA manifest + installability -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#141416" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="application-name" content="Gather" />
+
+    <!-- iOS home-screen web app -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Gather" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!-- Icons / favicons -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+    <link rel="shortcut icon" href="/favicon.ico" />
+
+    <!-- The `react-native-web` recommended style reset. -->
+    <style id="expo-reset">
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        overflow: hidden;
+        margin: 0;
+        background-color: #141416;
+        overscroll-behavior-y: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+      #root {
+        display: flex;
+        height: 100%;
+        flex: 1;
+      }
+    </style>
+  </head>
+
+  <body>
+    <noscript>Tu dois activer JavaScript pour utiliser Gather.</noscript>
+    <div id="root"></div>
+  </body>
+</html>
