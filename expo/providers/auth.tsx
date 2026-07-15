@@ -4,6 +4,7 @@ import type { Session, User } from "@supabase/supabase-js";
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { signInWithOAuthProvider, type OAuthProvider } from "@/lib/oauth";
+import { sendPasswordReset } from "@/lib/passwordReset";
 import { setPendingInvite } from "@/lib/pendingInvite";
 import { unregisterPushToken } from "@/lib/push";
 import type { Profile } from "@/lib/types";
@@ -19,6 +20,9 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
   const queryClient = useQueryClient();
   const [session, setSession] = useState<Session | null>(null);
   const [initializing, setInitializing] = useState<boolean>(true);
+  // True while the user is mid password-recovery (arrived from a reset link).
+  // Gates the router onto the "set a new password" screen.
+  const [recoveryMode, setRecoveryMode] = useState<boolean>(false);
 
   useEffect(() => {
     let active = true;
@@ -28,7 +32,9 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       setInitializing(false);
     });
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      // Fired on web (detectSessionInUrl) when landing from a recovery link.
+      if (event === "PASSWORD_RECOVERY") setRecoveryMode(true);
       setSession(nextSession);
       if (!nextSession) {
         queryClient.clear();
@@ -88,6 +94,30 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     if (error) throw error;
   }, []);
 
+  /** Sends the "reset your password" email with a recovery link. */
+  const resetPassword = useCallback(async (email: string) => {
+    await sendPasswordReset(email);
+  }, []);
+
+  /**
+   * Sets a brand-new password using the active recovery session, then exits
+   * recovery mode. The user stays signed in afterwards.
+   */
+  const updatePassword = useCallback(async (password: string) => {
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) throw error;
+    setRecoveryMode(false);
+  }, []);
+
+  /** Enters recovery mode manually (native deep-link flow). */
+  const enterRecoveryMode = useCallback(() => setRecoveryMode(true), []);
+
+  /** Abandons a reset: drops the temporary recovery session, back to login. */
+  const cancelRecovery = useCallback(async () => {
+    setRecoveryMode(false);
+    await supabase.auth.signOut();
+  }, []);
+
   /**
    * Google / Apple sign-in via Supabase social OAuth. Persists a pending invite
    * first so it is redeemed after the (possibly new) account lands. Returns
@@ -119,12 +149,17 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     profile: profileQuery.data ?? null,
     isAuthenticated: !!session,
     initializing,
+    recoveryMode,
     profileLoading: profileQuery.isLoading,
     signIn,
     signUp,
     signInWithProvider,
     signOut,
     resendConfirmation,
+    resetPassword,
+    updatePassword,
+    enterRecoveryMode,
+    cancelRecovery,
     refetchProfile: profileQuery.refetch,
   };
 });

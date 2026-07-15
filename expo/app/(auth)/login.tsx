@@ -100,6 +100,10 @@ export default function LoginScreen() {
             </TouchableOpacity>
           </Field>
 
+          <TouchableOpacity onPress={() => router.push("/forgot-password")} style={{ alignSelf: "flex-end", marginTop: -spacing.xs }} hitSlop={8}>
+            <AppText style={{ color: colors.accent, fontWeight: "600", fontSize: 13.5 }}>Mot de passe oublié ?</AppText>
+          </TouchableOpacity>
+
           {needsConfirmation ? (
             <TouchableOpacity onPress={onResend}>
               <AppText style={{ color: colors.accent, fontWeight: "600", fontSize: 13.5 }}>

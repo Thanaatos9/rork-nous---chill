@@ -23,8 +23,9 @@ export const oauthRedirectTo: string = makeRedirectUri({
 /**
  * Turns the redirect URL returned by the browser into a Supabase session.
  * Handles both PKCE (`?code=…`) and implicit (`#access_token=…`) responses.
+ * Shared by OAuth sign-in and the native password-recovery deep link.
  */
-async function createSessionFromUrl(url: string): Promise<boolean> {
+export async function createSessionFromUrl(url: string): Promise<boolean> {
   const { params, errorCode } = QueryParams.getQueryParams(url);
   if (errorCode) throw new Error(errorCode);
 

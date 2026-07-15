@@ -13,6 +13,7 @@ import { colors, spacing } from "@/constants/theme";
 import { hasSupabaseConfig } from "@/lib/supabase";
 import { registerServiceWorker } from "@/lib/pwa";
 import { queryClient } from "@/lib/queryClient";
+import { establishRecoverySession, isRecoveryUrl } from "@/lib/passwordReset";
 import { setPendingInvite } from "@/lib/pendingInvite";
 import { AuthProvider, useAuth } from "@/providers/auth";
 import { NotificationsProvider } from "@/providers/notifications";
@@ -22,7 +23,7 @@ import { ToastProvider, ToastViewport } from "@/providers/toast";
 SplashScreen.preventAutoHideAsync();
 
 function RootNav() {
-  const { isAuthenticated, initializing } = useAuth();
+  const { isAuthenticated, initializing, recoveryMode, enterRecoveryMode } = useAuth();
   const { resolved } = useThemeMode();
   const segments = useSegments();
   const router = useRouter();
@@ -33,17 +34,41 @@ function RootNav() {
     if (initializing) return;
     SplashScreen.hideAsync().catch(() => {});
     const inAuthGroup = segments[0] === "(auth)";
-    if (!isAuthenticated && !inAuthGroup) {
+    const onReset = segments[0] === "reset-password";
+
+    // Password recovery takes priority over everything: keep the user on the
+    // "set a new password" screen until they finish or cancel.
+    if (recoveryMode) {
+      if (!onReset) router.replace("/reset-password");
+      return;
+    }
+    // Never bounce away from the reset screen before recovery mode resolves
+    // (the PASSWORD_RECOVERY event / native link parsing can arrive a tick late).
+    if (!isAuthenticated && !inAuthGroup && !onReset) {
       router.replace("/login");
     } else if (isAuthenticated && inAuthGroup) {
       router.replace("/");
     }
-  }, [isAuthenticated, initializing, segments, router]);
+  }, [isAuthenticated, initializing, segments, router, recoveryMode]);
 
-  // Warm-start invite deep links (app already running). Cold-start links are
-  // handled by app/+native-intent.tsx before the tree mounts.
+  // Warm-start deep links (app already running). Cold-start links are handled
+  // by app/+native-intent.tsx before the tree mounts.
   useEffect(() => {
     const sub = Linking.addEventListener("url", (e) => {
+      // Password-recovery link: establish the temporary session, then route to
+      // the reset screen. Web handles this automatically via detectSessionInUrl.
+      if (isRecoveryUrl(e.url)) {
+        establishRecoverySession(e.url)
+          .then((ok) => {
+            if (ok) {
+              enterRecoveryMode();
+              router.replace("/reset-password");
+            }
+          })
+          .catch(() => {});
+        return;
+      }
+
       const parsed = Linking.parse(e.url);
       const code = typeof parsed.queryParams?.code === "string" ? parsed.queryParams.code : null;
       const isJoin = (parsed.path ?? "").toLowerCase().includes("join");
@@ -55,7 +80,7 @@ function RootNav() {
       }
     });
     return () => sub.remove();
-  }, [isAuthenticated, router]);
+  }, [isAuthenticated, router, enterRecoveryMode]);
 
   return (
     // Remounting on scheme change lets every inline style pick up the new palette.
@@ -64,6 +89,7 @@ function RootNav() {
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}>
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="index" />
+        <Stack.Screen name="reset-password" options={{ animation: "fade" }} />
         <Stack.Screen name="onboarding" options={{ presentation: "fullScreenModal", gestureEnabled: false, animation: "fade" }} />
         <Stack.Screen name="space/[id]" />
         <Stack.Screen name="space-settings/[spaceId]" options={{ presentation: "modal" }} />
