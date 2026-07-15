@@ -1,6 +1,7 @@
 import { makeRedirectUri } from "expo-auth-session";
 import * as QueryParams from "expo-auth-session/build/QueryParams";
 import * as WebBrowser from "expo-web-browser";
+import { Platform } from "react-native";
 import { supabase } from "@/lib/supabase";
 
 export type OAuthProvider = "google" | "apple";
@@ -53,6 +54,22 @@ async function createSessionFromUrl(url: string): Promise<boolean> {
  * Throws on any real error (provider not enabled, network, etc.).
  */
 export async function signInWithOAuthProvider(provider: OAuthProvider): Promise<boolean> {
+  // Web: a full-page redirect is the only reliable flow. Opening a popup (the
+  // native path below) is blocked by virtually every browser, which is why the
+  // buttons appeared to "do nothing". Supabase navigates the whole page to the
+  // provider; on return, the session is picked up from the URL automatically
+  // (see `detectSessionInUrl` in lib/supabase.ts).
+  if (Platform.OS === "web") {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo: oauthRedirectTo },
+    });
+    if (error) throw error;
+    // The browser is now navigating away; this line is effectively unreachable.
+    return true;
+  }
+
+  // Native: open an in-app auth session, then exchange the returned code/token.
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider,
     options: {

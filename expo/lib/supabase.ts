@@ -31,7 +31,10 @@ export const supabase = createClient(
       storage: AsyncStorage,
       autoRefreshToken: true,
       persistSession: true,
-      detectSessionInUrl: false,
+      // Web uses a full-page OAuth redirect, so the client must parse the
+      // returning URL to establish the session. Native handles the code/token
+      // manually after an in-app browser session, so it stays disabled there.
+      detectSessionInUrl: Platform.OS === "web",
     },
   },
 );
