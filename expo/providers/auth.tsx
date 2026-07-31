@@ -26,16 +26,33 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
   useEffect(() => {
     let active = true;
-    supabase.auth.getSession().then(({ data }) => {
-      if (!active) return;
-      setSession(data.session);
-      setInitializing(false);
-    });
+    // Never leave the app stuck on the splash: if getSession() rejects (e.g. a
+    // browser that blocks local storage) or hangs (web-locks stall), we still
+    // release the gate and fall back to the unauthenticated state.
+    const finishInit = () => {
+      if (active) setInitializing(false);
+    };
+    supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        if (!active) return;
+        setSession(data.session);
+      })
+      .catch(() => {
+        // Storage blocked / transient failure — continue signed out.
+      })
+      .finally(finishInit);
+
+    // Failsafe: guarantee the splash is dismissed even if getSession() never
+    // settles (some browsers stall the auth lock indefinitely).
+    const failsafe = setTimeout(finishInit, 5000);
 
     const { data: sub } = supabase.auth.onAuthStateChange((event, nextSession) => {
       // Fired on web (detectSessionInUrl) when landing from a recovery link.
       if (event === "PASSWORD_RECOVERY") setRecoveryMode(true);
       setSession(nextSession);
+      // Any auth event means initialization resolved.
+      finishInit();
       if (!nextSession) {
         queryClient.clear();
       }
@@ -43,6 +60,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
     return () => {
       active = false;
+      clearTimeout(failsafe);
       sub.subscription.unsubscribe();
     };
   }, [queryClient]);
