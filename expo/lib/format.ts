@@ -17,6 +17,15 @@ export function formatDate(value: string | null | undefined): string {
   return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 }
 
+/** Day-first numeric format: JJ/MM/AAAA (e.g. 30/07/2026). */
+export function formatDMY(value: string | Date | null | undefined): string {
+  const d = value instanceof Date ? value : toDate(value);
+  if (!d || isNaN(d.getTime())) return "";
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  return `${dd}/${mm}/${d.getFullYear()}`;
+}
+
 export function formatDateShort(value: string | null | undefined): string {
   const d = toDate(value);
   if (!d) return "";
