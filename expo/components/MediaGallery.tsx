@@ -52,7 +52,7 @@ function FullscreenViewer({ media, initialIndex, onClose }: { media: EpisodeMedi
           ))}
         </ScrollView>
         <View style={{ position: "absolute", top: 54, right: spacing.lg }}>
-          <IconButton icon={<X size={22} color="#fff" />} onPress={onClose} size={44} style={{ backgroundColor: "rgba(255,255,255,0.15)" }} />
+          <IconButton icon={<X size={22} color="#fff" />} onPress={onClose} size={44} style={{ backgroundColor: "rgba(255,255,255,0.15)" }} accessibilityLabel="Fermer la galerie" />
         </View>
         {media.length > 1 ? (
           <View style={{ position: "absolute", bottom: 50, left: 0, right: 0, flexDirection: "row", justifyContent: "center", gap: 6 }}>

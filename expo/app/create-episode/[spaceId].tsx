@@ -28,6 +28,7 @@ export default function CreateEpisodeScreen() {
   const createEpisode = useCreateEpisode();
 
   const [title, setTitle] = useState<string>("");
+  const [titleError, setTitleError] = useState<string | null>(null);
   const [date, setDate] = useState<Date>(new Date());
   const [place, setPlace] = useState<string>("");
   const [durationStr, setDurationStr] = useState<string>("");
@@ -63,9 +64,10 @@ export default function CreateEpisodeScreen() {
 
   const onSubmit = async () => {
     if (!title.trim()) {
-      toast.error("Donne un titre à cet épisode.");
+      setTitleError("Donne un titre à cet épisode.");
       return;
     }
+    setTitleError(null);
     setLoading(true);
     try {
       const durationNum = durationStr.trim() ? Number(durationStr.replace(/[^0-9]/g, "")) : null;
@@ -91,7 +93,7 @@ export default function CreateEpisodeScreen() {
     return (
       <Screen scroll contentStyle={{ paddingHorizontal: spacing.lg }}>
         <View style={{ alignItems: "flex-end", paddingTop: spacing.sm }}>
-          <IconButton icon={<X size={20} color={colors.text} />} onPress={() => router.back()} size={40} />
+          <IconButton icon={<X size={20} color={colors.text} />} onPress={() => router.back()} size={40} accessibilityLabel="Fermer" />
         </View>
         <View style={{ alignItems: "center", gap: spacing.md, marginTop: spacing.xxxl, paddingHorizontal: spacing.lg }}>
           <View style={{ width: 72, height: 72, borderRadius: 36, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" }}>
@@ -115,7 +117,7 @@ export default function CreateEpisodeScreen() {
           <AppText variant="title">Nouvel épisode</AppText>
           <AppText variant="caption">Un moment que vous avez vécu ensemble</AppText>
         </View>
-        <IconButton icon={<X size={20} color={colors.text} />} onPress={() => router.back()} size={40} />
+        <IconButton icon={<X size={20} color={colors.text} />} onPress={() => router.back()} size={40} accessibilityLabel="Fermer" />
       </View>
 
       <FadeIn>
@@ -145,8 +147,16 @@ export default function CreateEpisodeScreen() {
             ) : null}
           </Field>
 
-          <Field label="Titre">
-            <Input placeholder="Notre week-end à Lisbonne" value={title} onChangeText={setTitle} />
+          <Field label="Titre" error={titleError}>
+            <Input
+              placeholder="Notre week-end à Lisbonne"
+              value={title}
+              onChangeText={(t) => {
+                setTitle(t);
+                if (titleError) setTitleError(null);
+              }}
+              invalid={!!titleError}
+            />
           </Field>
 
           <View style={{ flexDirection: "row", gap: spacing.md }}>

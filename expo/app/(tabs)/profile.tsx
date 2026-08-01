@@ -1,10 +1,8 @@
 import * as Haptics from "expo-haptics";
-import * as Notifications from "expo-notifications";
 import { useRouter } from "expo-router";
-import { Bell, Camera, ChevronRight, GraduationCap, LogOut, Info, Moon, Palette, Smartphone, Sun } from "lucide-react-native";
+import { Bell, Camera, ChevronRight, GraduationCap, Info, LogOut, Moon, Palette, Smartphone, Sun, Users } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import { Alert, Platform, Switch, TouchableOpacity, View } from "react-native";
-import { AppHeader } from "@/components/AppHeader";
 import { CoverAdjustModal } from "@/components/CoverAdjustModal";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
@@ -15,12 +13,44 @@ import { AppText } from "@/components/ui/Text";
 import { colors, radius, spacing } from "@/constants/theme";
 import { friendlyError } from "@/lib/errors";
 import { PickedAsset, pickAvatarImage, uploadMedia } from "@/lib/media";
-import { registerPushToken } from "@/lib/push";
+import { loadNotifications, registerPushToken } from "@/lib/push";
 import { useUpdateProfile } from "@/hooks/useProfile";
-import { useMySpaces } from "@/hooks/useSpaces";
+import { useActiveSpace } from "@/providers/activeSpace";
 import { useAuth } from "@/providers/auth";
 import { ThemeMode, useThemeMode } from "@/providers/theme";
 import { useToast } from "@/providers/toast";
+
+function Row({
+  icon,
+  title,
+  subtitle,
+  onPress,
+  accessibilityLabel,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  subtitle: string;
+  onPress: () => void;
+  accessibilityLabel: string;
+}) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      style={{ flexDirection: "row", alignItems: "center", gap: spacing.md, minHeight: 44 }}
+    >
+      <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" }}>
+        {icon}
+      </View>
+      <View style={{ flex: 1 }}>
+        <AppText style={{ fontWeight: "600", fontSize: 15, color: colors.text }}>{title}</AppText>
+        <AppText variant="caption">{subtitle}</AppText>
+      </View>
+      <ChevronRight size={18} color={colors.textMuted} />
+    </TouchableOpacity>
+  );
+}
 
 function PushToggle() {
   const toast = useToast();
@@ -28,13 +58,19 @@ function PushToggle() {
   const [enabled, setEnabled] = useState<boolean>(false);
 
   useEffect(() => {
-    Notifications.getPermissionsAsync()
+    loadNotifications()
+      ?.getPermissionsAsync()
       .then((s) => setEnabled(s.granted))
       .catch(() => {});
   }, []);
 
   const onToggle = async (value: boolean) => {
     if (value) {
+      const Notifications = loadNotifications();
+      if (!Notifications) {
+        toast.info("Les notifications demandent l'app installée, pas Expo Go.");
+        return;
+      }
       try {
         const s = await Notifications.requestPermissionsAsync();
         setEnabled(s.granted);
@@ -61,7 +97,14 @@ function PushToggle() {
         <AppText style={{ fontWeight: "600", fontSize: 15, color: colors.text }}>Notifications push</AppText>
         <AppText variant="caption">Épisodes, commentaires, déverrouillages</AppText>
       </View>
-      <Switch value={enabled} onValueChange={onToggle} trackColor={{ false: colors.surface, true: colors.primary }} thumbColor="#fff" ios_backgroundColor={colors.surface} />
+      <Switch
+        value={enabled}
+        onValueChange={onToggle}
+        trackColor={{ false: colors.surface, true: colors.primary }}
+        thumbColor="#fff"
+        ios_backgroundColor={colors.surface}
+        accessibilityLabel="Activer les notifications push"
+      />
     </View>
   );
 }
@@ -100,13 +143,16 @@ function ThemeSelector() {
               key={value}
               onPress={() => onSelect(value)}
               activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel={`Thème ${label}`}
+              accessibilityState={{ selected }}
               style={{
                 flex: 1,
                 flexDirection: "row",
                 alignItems: "center",
                 justifyContent: "center",
                 gap: 6,
-                paddingVertical: 9,
+                minHeight: 44,
                 borderRadius: radius.sm,
                 backgroundColor: selected ? colors.cardElevated : "transparent",
                 borderWidth: 1,
@@ -123,14 +169,15 @@ function ThemeSelector() {
   );
 }
 
-export default function SettingsScreen() {
+export default function ProfileScreen() {
   const router = useRouter();
   const toast = useToast();
   const { profile, user, signOut } = useAuth();
   const updateProfile = useUpdateProfile();
-  const { data: spaces } = useMySpaces();
+  const { space, spaces } = useActiveSpace();
 
   const [name, setName] = useState<string>(profile?.name ?? "");
+  const [nameError, setNameError] = useState<string | null>(null);
   const [bio, setBio] = useState<string>(profile?.bio ?? "");
   const [hydrated, setHydrated] = useState<boolean>(false);
   const [savingAvatar, setSavingAvatar] = useState<boolean>(false);
@@ -148,9 +195,10 @@ export default function SettingsScreen() {
 
   const onSave = async () => {
     if (!name.trim()) {
-      toast.error("Ton prénom ne peut pas être vide.");
+      setNameError("Ton prénom ne peut pas être vide.");
       return;
     }
+    setNameError(null);
     try {
       await updateProfile.mutateAsync({ name: name.trim(), bio: bio.trim() || null });
       toast.success("Profil mis à jour");
@@ -172,11 +220,9 @@ export default function SettingsScreen() {
     setPendingAvatar(null);
     setSavingAvatar(true);
     try {
-      // uploadMedia probes the storage rules for an accepted path format and
-      // falls back to an inline image if every path is refused.
       const url = await uploadMedia(
-        { kind: "avatars", spaceId: spaces?.[0]?.id ?? null, userId: user?.id ?? null },
-        cropped,
+        { kind: "avatars", spaceId: space?.id ?? null, userId: user?.id ?? null },
+        cropped
       );
       await updateProfile.mutateAsync({ avatar_url: url });
       toast.success("Photo mise à jour");
@@ -196,12 +242,19 @@ export default function SettingsScreen() {
 
   return (
     <Screen scroll contentStyle={{ paddingHorizontal: spacing.lg }}>
-      <AppHeader title="Réglages" style={{ paddingHorizontal: 0 }} />
+      <View style={{ paddingTop: spacing.sm, paddingBottom: spacing.md }}>
+        <AppText variant="title">Profil</AppText>
+      </View>
 
       <FadeIn>
         <Card elevated style={{ gap: spacing.lg }}>
           <View style={{ alignItems: "center", gap: spacing.sm }}>
-            <TouchableOpacity onPress={onChangeAvatar} activeOpacity={0.8}>
+            <TouchableOpacity
+              onPress={onChangeAvatar}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Changer ma photo de profil"
+            >
               <Avatar profile={profile} size={92} />
               <View style={{ position: "absolute", bottom: 0, right: 0, width: 30, height: 30, borderRadius: 15, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: colors.card }}>
                 <Camera size={15} color="#fff" />
@@ -210,8 +263,16 @@ export default function SettingsScreen() {
             {savingAvatar ? <AppText variant="caption">Envoi…</AppText> : <AppText variant="caption">{user?.email}</AppText>}
           </View>
 
-          <Field label="Prénom">
-            <Input placeholder="Ton prénom" value={name} onChangeText={setName} />
+          <Field label="Prénom" error={nameError}>
+            <Input
+              placeholder="Ton prénom"
+              value={name}
+              onChangeText={(t) => {
+                setName(t);
+                if (nameError) setNameError(null);
+              }}
+              invalid={!!nameError}
+            />
           </Field>
           <Field label="Bio (optionnel)">
             <Input placeholder="Quelques mots sur toi…" value={bio} onChangeText={setBio} multiline />
@@ -221,25 +282,36 @@ export default function SettingsScreen() {
       </FadeIn>
 
       <View style={{ marginTop: spacing.xxl }}>
+        <SectionHeader title="Espace" subtitle={space?.name ?? "Aucun espace actif"} />
+        <Card style={{ gap: spacing.lg }}>
+          <Row
+            icon={<Users size={18} color={colors.text} />}
+            title="Membres"
+            subtitle={space ? "Voir qui partage l'aventure, gérer les accès" : "Rejoins un espace pour voir ses membres"}
+            accessibilityLabel="Ouvrir les membres de l'espace"
+            onPress={() =>
+              space
+                ? router.push({ pathname: "/space-members/[spaceId]", params: { spaceId: space.id } })
+                : router.push("/join")
+            }
+          />
+          <Divider />
+          <Row
+            icon={<GraduationCap size={18} color={colors.text} />}
+            title="Revoir le didacticiel"
+            subtitle="Le petit tour de bienvenue de Gather"
+            accessibilityLabel="Revoir le didacticiel"
+            onPress={() => router.push("/onboarding")}
+          />
+        </Card>
+      </View>
+
+      <View style={{ marginTop: spacing.xxl }}>
         <SectionHeader title="Préférences" />
         <Card style={{ gap: spacing.lg }}>
           <ThemeSelector />
           <Divider />
           <PushToggle />
-          <Divider />
-          <TouchableOpacity
-            onPress={() => router.push("/onboarding")}
-            style={{ flexDirection: "row", alignItems: "center", gap: spacing.md }}
-          >
-            <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" }}>
-              <GraduationCap size={18} color={colors.text} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <AppText style={{ fontWeight: "600", fontSize: 15, color: colors.text }}>Revoir le didacticiel</AppText>
-              <AppText variant="caption">Le petit tour de bienvenue de Gather</AppText>
-            </View>
-            <ChevronRight size={18} color={colors.textFaint} />
-          </TouchableOpacity>
         </Card>
       </View>
 
@@ -250,13 +322,21 @@ export default function SettingsScreen() {
             <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" }}>
               <Info size={18} color={colors.text} />
             </View>
-            <AppText style={{ flex: 1, fontWeight: "600", fontSize: 15, color: colors.text }}>Gather</AppText>
+            <View style={{ flex: 1 }}>
+              <AppText style={{ fontWeight: "600", fontSize: 15, color: colors.text }}>Gather</AppText>
+              <AppText variant="caption">{spaces.length} espace{spaces.length > 1 ? "s" : ""}</AppText>
+            </View>
             <AppText variant="caption">v1.0.0</AppText>
           </View>
         </Card>
       </View>
 
-      <TouchableOpacity onPress={confirmSignOut} style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginTop: spacing.xxl, paddingVertical: spacing.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.destructiveSoft }}>
+      <TouchableOpacity
+        onPress={confirmSignOut}
+        accessibilityRole="button"
+        accessibilityLabel="Se déconnecter"
+        style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginTop: spacing.xxl, minHeight: 48, borderRadius: radius.md, borderWidth: 1, borderColor: colors.destructiveSoft }}
+      >
         <LogOut size={18} color={colors.destructive} />
         <AppText style={{ color: colors.destructive, fontWeight: "700" }}>Se déconnecter</AppText>
       </TouchableOpacity>

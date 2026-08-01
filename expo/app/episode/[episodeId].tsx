@@ -25,6 +25,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Card, Divider, SectionHeader } from "@/components/ui/Card";
 import { Loader } from "@/components/ui/Feedback";
+import { useAutoGrow } from "@/components/ui/Input";
 import { FadeIn, Pulse, PressableScale } from "@/components/ui/motion";
 import { AppText } from "@/components/ui/Text";
 import { colors, radius, spacing } from "@/constants/theme";
@@ -169,6 +170,9 @@ export default function EpisodeDetailScreen() {
   const addMedia = useAddEpisodeMedia(episodeId, spaceId);
 
   const [draft, setDraft] = useState<string>("");
+  // The composer sits in the page scroll, so it can grow with the comment
+  // rather than trapping a long one behind an inner scrollbar.
+  const draftGrow = useAutoGrow({ enabled: true, value: draft, minHeight: 47, extraHeight: 3 });
 
   const participate = canParticipate(space?.membership);
   const isObserver = effectiveRole(space?.membership) === "observer";
@@ -219,9 +223,9 @@ export default function EpisodeDetailScreen() {
         <View>
           <MediaGallery media={episode.media ?? []} height={380} />
           <View style={{ position: "absolute", top: insets.top + 6, left: spacing.lg, right: spacing.lg, flexDirection: "row", justifyContent: "space-between" }}>
-            <IconButton icon={<ChevronLeft size={22} color="#fff" />} onPress={() => router.back()} size={42} style={{ backgroundColor: "rgba(0,0,0,0.45)" }} />
+            <IconButton icon={<ChevronLeft size={22} color="#fff" />} onPress={() => router.back()} size={42} style={{ backgroundColor: "rgba(0,0,0,0.45)" }} accessibilityLabel="Retour" />
             {participate ? (
-              <IconButton icon={<ImagePlus size={20} color="#fff" />} onPress={onAddMedia} size={42} style={{ backgroundColor: "rgba(0,0,0,0.45)" }} />
+              <IconButton icon={<ImagePlus size={20} color="#fff" />} onPress={onAddMedia} size={42} style={{ backgroundColor: "rgba(0,0,0,0.45)" }} accessibilityLabel="Ajouter des photos ou vidéos" />
             ) : null}
           </View>
         </View>
@@ -389,18 +393,21 @@ export default function EpisodeDetailScreen() {
             )}
 
             {participate ? (
-              <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.sm }}>
+              <View style={{ flexDirection: "row", alignItems: "flex-end", gap: spacing.sm, marginTop: spacing.sm }}>
                 <TextInput
+                  ref={draftGrow.ref}
                   value={draft}
                   onChangeText={setDraft}
                   placeholder="Ajouter un commentaire…"
                   placeholderTextColor={colors.textFaint}
                   onSubmitEditing={onSendComment}
+                  onContentSizeChange={draftGrow.onContentSizeChange}
                   returnKeyType="send"
                   multiline
-                  style={{ flex: 1, color: colors.text, fontSize: 15, backgroundColor: colors.bgElevated, borderRadius: radius.xl, borderWidth: 1.5, borderColor: colors.border, paddingHorizontal: spacing.lg, paddingTop: 12, paddingBottom: 12, maxHeight: 110 }}
+                  textAlignVertical="top"
+                  style={{ flex: 1, color: colors.text, fontSize: 15, backgroundColor: colors.bgElevated, borderRadius: radius.xl, borderWidth: 1.5, borderColor: colors.border, paddingHorizontal: spacing.lg, paddingTop: 12, paddingBottom: 12, minHeight: draftGrow.minHeight, height: draftGrow.height }}
                 />
-                <IconButton icon={<Send size={18} color={colors.primaryFg} />} variant="primary" onPress={onSendComment} />
+                <IconButton icon={<Send size={18} color={colors.primaryFg} />} variant="primary" onPress={onSendComment} accessibilityLabel="Envoyer le commentaire" />
               </View>
             ) : isObserver ? (
               <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: spacing.sm }}>

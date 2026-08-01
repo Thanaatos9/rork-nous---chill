@@ -227,7 +227,7 @@ export function CoverAdjustModal({ asset, title = "Ajuster la couverture", shape
                   : "Déplace et zoome — la zone claire sera ta couverture"}
               </AppText>
             </View>
-            <IconButton icon={<X size={20} color={colors.text} />} onPress={onCancel} size={40} />
+            <IconButton icon={<X size={20} color={colors.text} />} onPress={onCancel} size={40} accessibilityLabel="Annuler" />
           </View>
 
           <View style={{ flex: 1, justifyContent: "center", alignItems: "center", overflow: "hidden" }} {...responder.panHandlers}>
@@ -286,11 +286,11 @@ export function CoverAdjustModal({ asset, title = "Ajuster la couverture", shape
 
           <View style={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, gap: spacing.lg }}>
             <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.lg }}>
-              <IconButton icon={<Minus size={18} color={colors.text} />} onPress={() => stepZoom(-ZOOM_STEP)} size={44} />
+              <IconButton icon={<Minus size={18} color={colors.text} />} onPress={() => stepZoom(-ZOOM_STEP)} size={44} accessibilityLabel="Dézoomer" />
               <AppText variant="label" style={{ width: 60, textAlign: "center", color: colors.text }}>
                 {zoomPct} %
               </AppText>
-              <IconButton icon={<Plus size={18} color={colors.text} />} onPress={() => stepZoom(ZOOM_STEP)} size={44} />
+              <IconButton icon={<Plus size={18} color={colors.text} />} onPress={() => stepZoom(ZOOM_STEP)} size={44} accessibilityLabel="Zoomer" />
             </View>
             <View style={{ flexDirection: "row", gap: spacing.md }}>
               <Button title="Annuler" variant="secondary" onPress={onCancel} style={{ flex: 1 }} />

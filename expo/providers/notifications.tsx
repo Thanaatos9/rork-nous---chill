@@ -1,19 +1,9 @@
-import * as Notifications from "expo-notifications";
 import { useRouter } from "expo-router";
 import React, { useEffect } from "react";
 import { Platform } from "react-native";
 import { colors } from "@/constants/theme";
-import { registerPushToken } from "@/lib/push";
+import { loadNotifications, registerPushToken } from "@/lib/push";
 import { useAuth } from "@/providers/auth";
-
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: false,
-    shouldSetBadge: true,
-  }),
-});
 
 /**
  * Sets up local notification handling: permissions, an Android channel, and
@@ -31,6 +21,19 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
   }, [userId]);
 
   useEffect(() => {
+    // Null in Expo Go, where notifications are unavailable anyway.
+    const Notifications = loadNotifications();
+    if (!Notifications) return;
+
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowBanner: true,
+        shouldShowList: true,
+        shouldPlaySound: false,
+        shouldSetBadge: true,
+      }),
+    });
+
     (async () => {
       try {
         if (Platform.OS === "android") {

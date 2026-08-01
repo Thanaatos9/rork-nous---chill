@@ -19,6 +19,7 @@ import { friendlyError } from "@/lib/errors";
 import { PickedAsset, pickCoverImage, uploadMedia } from "@/lib/media";
 import type { Space } from "@/lib/types";
 import { useCreateSpace, useUpdateSpace } from "@/hooks/useSpaces";
+import { useActiveSpace } from "@/providers/activeSpace";
 import { useAuth } from "@/providers/auth";
 import { useToast } from "@/providers/toast";
 
@@ -34,8 +35,11 @@ export default function CreateSpaceScreen() {
   const createSpace = useCreateSpace();
   const updateSpace = useUpdateSpace();
   const { userId } = useAuth();
+  const { select } = useActiveSpace();
 
   const [name, setName] = useState<string>("");
+  const [nameError, setNameError] = useState<string | null>(null);
+  const [dateError, setDateError] = useState<string | null>(null);
   const [description, setDescription] = useState<string>("");
   const [cover, setCover] = useState<PickedAsset | null>(null);
   const [pendingCover, setPendingCover] = useState<PickedAsset | null>(null);
@@ -55,14 +59,18 @@ export default function CreateSpaceScreen() {
   };
 
   const onCreate = async () => {
+    // Errors belong next to the field that caused them, not in a toast that may
+    // pop far from where the user is looking on a long form.
     if (!name.trim()) {
-      toast.error("Donne un nom à ton espace.");
+      setNameError("Donne un nom à ton espace.");
       return;
     }
     if (end.getTime() <= start.getTime()) {
-      toast.error("La fin de saison doit être après le début.");
+      setDateError("La fin de saison doit être après le début.");
       return;
     }
+    setNameError(null);
+    setDateError(null);
     setLoading(true);
     try {
       // The storage policy only accepts paths starting with a space uuid, so
@@ -111,7 +119,7 @@ export default function CreateSpaceScreen() {
     return (
       <Screen scroll contentStyle={{ paddingHorizontal: spacing.lg }}>
         <View style={{ alignItems: "flex-end", paddingTop: spacing.sm }}>
-          <IconButton icon={<X size={20} color={colors.text} />} onPress={() => router.back()} size={40} />
+          <IconButton icon={<X size={20} color={colors.text} />} onPress={() => router.back()} size={40} accessibilityLabel="Fermer" />
         </View>
         <FadeIn>
           <View style={{ alignItems: "center", gap: spacing.md, marginTop: spacing.lg }}>
@@ -142,7 +150,10 @@ export default function CreateSpaceScreen() {
         <Button
           title="Ouvrir l'espace"
           size="lg"
-          onPress={() => router.replace({ pathname: "/space/[id]", params: { id: created.space.id } })}
+          onPress={() => {
+            select(created.space.id);
+            router.replace("/");
+          }}
           style={{ marginTop: spacing.xxl }}
         />
       </Screen>
@@ -156,7 +167,7 @@ export default function CreateSpaceScreen() {
           <AppText variant="title">Nouvel espace</AppText>
           <AppText variant="caption">Le groupe qui partagera ses moments</AppText>
         </View>
-        <IconButton icon={<X size={20} color={colors.text} />} onPress={() => router.back()} size={40} />
+        <IconButton icon={<X size={20} color={colors.text} />} onPress={() => router.back()} size={40} accessibilityLabel="Fermer" />
       </View>
 
       <FadeIn>
@@ -194,8 +205,17 @@ export default function CreateSpaceScreen() {
 
       <FadeIn delay={80}>
         <View style={{ gap: spacing.lg }}>
-          <Field label="Nom de l'espace">
-            <Input placeholder="Samuel & Mathilde — Saison 1" value={name} onChangeText={setName} autoFocus />
+          <Field label="Nom de l'espace" error={nameError}>
+            <Input
+              placeholder="Samuel & Mathilde — Saison 1"
+              value={name}
+              onChangeText={(t) => {
+                setName(t);
+                if (nameError) setNameError(null);
+              }}
+              invalid={!!nameError}
+              autoFocus
+            />
           </Field>
 
           <Field label="Description (optionnel)">
@@ -207,13 +227,33 @@ export default function CreateSpaceScreen() {
             />
           </Field>
 
-          <View style={{ flexDirection: "row", gap: spacing.md }}>
-            <View style={{ flex: 1 }}>
-              <DateField label="Début de saison" value={start} onChange={setStart} />
+          <View style={{ gap: 7 }}>
+            <View style={{ flexDirection: "row", gap: spacing.md }}>
+              <View style={{ flex: 1 }}>
+                <DateField
+                  label="Début de saison"
+                  value={start}
+                  onChange={(d) => {
+                    setStart(d);
+                    if (dateError) setDateError(null);
+                  }}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <DateField
+                  label="Fin de saison"
+                  value={end}
+                  onChange={(d) => {
+                    setEnd(d);
+                    if (dateError) setDateError(null);
+                  }}
+                  minimumDate={start}
+                />
+              </View>
             </View>
-            <View style={{ flex: 1 }}>
-              <DateField label="Fin de saison" value={end} onChange={setEnd} minimumDate={start} />
-            </View>
+            {dateError ? (
+              <AppText style={{ fontSize: 12.5, color: colors.destructive, fontWeight: "600" }}>{dateError}</AppText>
+            ) : null}
           </View>
 
           <Badge label="Tu seras le propriétaire de cet espace" tone="gold" style={{ marginTop: spacing.xs }} />

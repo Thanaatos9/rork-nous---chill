@@ -1,6 +1,6 @@
-import { Eye, PenLine, Send, UserCheck } from "lucide-react-native";
+import { Eye, PenLine, UserCheck } from "lucide-react-native";
 import React from "react";
-import { Share, View } from "react-native";
+import { View } from "react-native";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { AppText } from "@/components/ui/Text";
@@ -24,21 +24,13 @@ function Line({ icon, children }: { icon: React.ReactNode; children: React.React
   );
 }
 
-/** Shown to a member who has not been allowed to participate yet. */
-export function ObserverNotice({
-  spaceName,
-  ownerName,
-}: {
-  spaceName: string;
-  ownerName: string | null;
-}) {
+/**
+ * Shown to a member who has not been allowed to participate yet. Purely
+ * informational by design: promotion is the owner's call alone, so the observer
+ * gets no "request access" affordance to press.
+ */
+export function ObserverNotice({ ownerName }: { ownerName: string | null }) {
   const who = ownerName?.trim() || "Le propriétaire";
-
-  const askAccess = async () => {
-    await Share.share({
-      message: `Salut ! Je viens de rejoindre « ${spaceName} » sur Gather 🎬\nTu peux m'autoriser à participer depuis l'onglet Membres de l'espace.`,
-    });
-  };
 
   return (
     <Card style={{ gap: spacing.md }}>
@@ -69,13 +61,6 @@ export function ObserverNotice({
           Créer des épisodes et écrire tes impressions demandent son feu vert.
         </Line>
       </View>
-
-      <Button
-        title={`Demander à ${who === "Le propriétaire" ? "participer" : who}`}
-        variant="secondary"
-        icon={<Send size={16} color={colors.text} />}
-        onPress={askAccess}
-      />
     </Card>
   );
 }

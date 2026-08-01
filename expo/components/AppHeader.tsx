@@ -37,6 +37,7 @@ export function AppHeader({ title, subtitle, right, showBack = true, onBack, sty
           onPress={onBack ?? (() => router.back())}
           variant="secondary"
           size={40}
+          accessibilityLabel="Retour"
         />
       ) : null}
       <View style={{ flex: 1 }}>

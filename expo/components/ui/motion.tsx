@@ -1,6 +1,7 @@
 import * as Haptics from "expo-haptics";
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
+  AccessibilityInfo,
   Animated,
   Easing,
   Platform,
@@ -12,6 +13,33 @@ import {
 import { colors, radius } from "@/constants/theme";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+/**
+ * Whether the OS asks for reduced motion (iOS Reduce Motion, Android Remove
+ * Animations, `prefers-reduced-motion` on web). Looping and entrance animations
+ * must honour it — `Pulse` in particular ran forever on the review CTA.
+ */
+export function useReducedMotion(): boolean {
+  const [reduced, setReduced] = useState<boolean>(false);
+
+  useEffect(() => {
+    let active = true;
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then((value) => {
+        if (active) setReduced(value);
+      })
+      .catch(() => {});
+    const sub = AccessibilityInfo.addEventListener("reduceMotionChanged", (value) => {
+      setReduced(value);
+    });
+    return () => {
+      active = false;
+      sub.remove();
+    };
+  }, []);
+
+  return reduced;
+}
 
 export function haptic(style: Haptics.ImpactFeedbackStyle = Haptics.ImpactFeedbackStyle.Light) {
   if (Platform.OS === "web") return;
@@ -71,9 +99,15 @@ interface FadeInProps {
 
 /** Float-in: fade + upward translate. Use delay to stagger lists. */
 export function FadeIn({ children, delay = 0, offset = 14, duration = 420, style }: FadeInProps) {
+  const reduced = useReducedMotion();
   const v = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    if (reduced) {
+      // Land on the final state immediately rather than sliding into it.
+      v.setValue(1);
+      return;
+    }
     const anim = Animated.timing(v, {
       toValue: 1,
       duration,
@@ -83,7 +117,7 @@ export function FadeIn({ children, delay = 0, offset = 14, duration = 420, style
     });
     anim.start();
     return () => anim.stop();
-  }, [v, delay, duration]);
+  }, [v, delay, duration, reduced]);
 
   const translateY = v.interpolate({ inputRange: [0, 1], outputRange: [offset, 0] });
   return <Animated.View style={[{ opacity: v, transform: [{ translateY }] }, style]}>{children}</Animated.View>;
@@ -91,10 +125,12 @@ export function FadeIn({ children, delay = 0, offset = 14, duration = 420, style
 
 /** Looping red pulse used on attention elements (e.g. "new review available"). */
 export function Pulse({ children, style, active = true }: { children: React.ReactNode; style?: StyleProp<ViewStyle>; active?: boolean }) {
+  const reduced = useReducedMotion();
   const v = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    if (!active) return;
+    // A never-ending loop is exactly what reduced-motion users switch off.
+    if (!active || reduced) return;
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(v, { toValue: 1, duration: 1100, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
@@ -103,7 +139,7 @@ export function Pulse({ children, style, active = true }: { children: React.Reac
     );
     loop.start();
     return () => loop.stop();
-  }, [v, active]);
+  }, [v, active, reduced]);
 
   const scale = v.interpolate({ inputRange: [0, 1], outputRange: [1, 1.06] });
   const opacity = v.interpolate({ inputRange: [0, 1], outputRange: [1, 0.78] });

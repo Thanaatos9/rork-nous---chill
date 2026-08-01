@@ -18,6 +18,8 @@ interface Props {
   disabled?: boolean;
   fullWidth?: boolean;
   style?: StyleProp<ViewStyle>;
+  /** Required when the button has no `title` — otherwise it is unlabelled to screen readers. */
+  accessibilityLabel?: string;
 }
 
 const sizeMap: Record<Size, { height: number; px: number; font: number; gap: number }> = {
@@ -56,6 +58,7 @@ export function Button({
   disabled = false,
   fullWidth = false,
   style,
+  accessibilityLabel,
 }: Props) {
   const s = sizeMap[size];
   const p = palette(variant);
@@ -73,6 +76,9 @@ export function Button({
       onPress={isDisabled ? undefined : onPress}
       disabled={isDisabled}
       scaleTo={0.97}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? title}
+      accessibilityState={{ disabled: isDisabled, busy: loading }}
       style={[
         {
           height: s.height,
@@ -112,18 +118,23 @@ export function IconButton({
   variant = "secondary",
   size = 42,
   style,
+  accessibilityLabel,
 }: {
   icon: React.ReactNode;
   onPress?: () => void;
   variant?: Variant;
   size?: number;
   style?: StyleProp<ViewStyle>;
+  /** An icon-only control is invisible to screen readers without this. */
+  accessibilityLabel: string;
 }) {
   const p = palette(variant);
   return (
     <PressableScale
       onPress={onPress}
       scaleTo={0.9}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
       style={[
         {
           width: size,

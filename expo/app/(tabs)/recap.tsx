@@ -1,12 +1,13 @@
 import { LinearGradient } from "expo-linear-gradient";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
-import { ChevronLeft, Clapperboard, Film, Lock, Share2, Sparkles, Users } from "lucide-react-native";
+import { Clapperboard, Film, Lock, Share2, Sparkles, Users } from "lucide-react-native";
 import React from "react";
 import { Alert, RefreshControl, Share, View } from "react-native";
-import { Button, IconButton } from "@/components/ui/Button";
-import { Card, Screen } from "@/components/ui/Card";
-import { Loader } from "@/components/ui/Feedback";
+import { SpaceSwitcher } from "@/components/SpaceSwitcher";
+import { Button } from "@/components/ui/Button";
+import { Card, Screen, SectionHeader } from "@/components/ui/Card";
+import { EmptyState, Loader } from "@/components/ui/Feedback";
 import { FadeIn, Pulse } from "@/components/ui/motion";
 import { AppText } from "@/components/ui/Text";
 import { colors, radius, spacing } from "@/constants/theme";
@@ -17,7 +18,8 @@ import { isOwner } from "@/lib/types";
 import { useEpisodes } from "@/hooks/useEpisodes";
 import { useMembers } from "@/hooks/useMembers";
 import { useSynthese } from "@/hooks/useProfile";
-import { useSpace, useUpdateSpace } from "@/hooks/useSpaces";
+import { useUpdateSpace } from "@/hooks/useSpaces";
+import { useActiveSpace } from "@/providers/activeSpace";
 import { useToast } from "@/providers/toast";
 
 function extractSummary(synthese: Synthese | null | undefined): string | null {
@@ -48,22 +50,38 @@ function StatBox({ label, value, icon }: { label: string; value: number; icon: R
 }
 
 export default function RecapScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const toast = useToast();
 
-  const { data: space, isLoading, refetch, isRefetching } = useSpace(id);
-  const { data: episodes } = useEpisodes(id);
-  const { data: members } = useMembers(id);
+  const { space, isLoading, hasNoSpace, refetch, isRefetching } = useActiveSpace();
+  const spaceId = space?.id ?? "";
+
+  const { data: episodes } = useEpisodes(spaceId);
+  const { data: members } = useMembers(spaceId);
   const unlocked = !!space?.season_unlocked;
-  const { data: synthese } = useSynthese(id, unlocked);
+  const { data: synthese } = useSynthese(spaceId, unlocked);
   const updateSpace = useUpdateSpace();
 
-  if (isLoading || !space) {
+  if (isLoading) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.bg }}>
         <Loader label="Chargement du bilan…" />
       </View>
+    );
+  }
+
+  if (hasNoSpace || !space) {
+    return (
+      <Screen scroll contentStyle={{ paddingHorizontal: spacing.lg }}>
+        <SpaceSwitcher />
+        <EmptyState
+          icon={<Sparkles size={30} color={colors.primary} />}
+          title="Aucun espace"
+          subtitle="Le bilan de saison apparaîtra ici une fois que tu feras partie d'un espace."
+          actionLabel="Créer un espace"
+          onAction={() => router.push("/create-space")}
+        />
+      </Screen>
     );
   }
 
@@ -81,7 +99,7 @@ export default function RecapScreen() {
           style: "destructive",
           onPress: async () => {
             try {
-              await updateSpace.mutateAsync({ spaceId: id, patch: { season_unlocked: true } });
+              await updateSpace.mutateAsync({ spaceId, patch: { season_unlocked: true } });
               toast.success("Saison débloquée 🎉");
             } catch (e) {
               toast.error(friendlyError(e));
@@ -100,24 +118,13 @@ export default function RecapScreen() {
 
   return (
     <Screen scroll contentStyle={{ paddingHorizontal: spacing.lg }} refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.primary} />}>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.md, paddingTop: spacing.sm, marginBottom: spacing.xl }}>
-        <IconButton
-          icon={<ChevronLeft size={22} color={colors.text} />}
-          variant="secondary"
-          size={40}
-          onPress={() => (router.canGoBack() ? router.back() : router.replace("/"))}
-        />
-        <View style={{ flex: 1 }}>
-          <AppText variant="title">Bilan de saison</AppText>
-          <AppText variant="caption">{space.name}</AppText>
-        </View>
-      </View>
+      <SpaceSwitcher />
+
+      <SectionHeader title="Bilan de saison" subtitle="Ce que chacun a pensé, révélé d'un coup" />
 
       {!unlocked ? (
         <FadeIn>
-          <View
-            style={{ borderRadius: radius.xxl, overflow: "hidden", borderWidth: 1, borderColor: colors.border }}
-          >
+          <View style={{ borderRadius: radius.xxl, overflow: "hidden", borderWidth: 1, borderColor: colors.border }}>
             <LinearGradient colors={["#2A0E13", "#16100F"]} style={{ padding: spacing.xl, alignItems: "center", gap: spacing.lg }}>
               <Pulse>
                 <View style={{ width: 96, height: 96, borderRadius: 48, backgroundColor: colors.primarySoft, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.primary }}>
@@ -141,9 +148,7 @@ export default function RecapScreen() {
                 </View>
               ) : null}
 
-              {space.season_end ? (
-                <AppText variant="caption">Fin prévue le {formatDate(space.season_end)}</AppText>
-              ) : null}
+              {space.season_end ? <AppText variant="caption">Fin prévue le {formatDate(space.season_end)}</AppText> : null}
             </LinearGradient>
           </View>
 
@@ -202,7 +207,7 @@ export default function RecapScreen() {
             </View>
 
             <View style={{ gap: spacing.md }}>
-              <Button title="Revoir les épisodes" variant="secondary" icon={<Clapperboard size={18} color={colors.text} />} onPress={() => router.push({ pathname: "/space/[id]/episodes", params: { id } })} />
+              <Button title="Revoir les épisodes" variant="secondary" icon={<Clapperboard size={18} color={colors.text} />} onPress={() => router.push("/")} />
               <Button title="Partager le bilan" variant="gold" icon={<Share2 size={18} color="#1A1607" />} onPress={shareRecap} />
             </View>
           </View>

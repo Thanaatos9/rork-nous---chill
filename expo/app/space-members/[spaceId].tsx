@@ -19,7 +19,7 @@ import { useAuth } from "@/providers/auth";
 import { useToast } from "@/providers/toast";
 
 export default function MembersScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { spaceId: id } = useLocalSearchParams<{ spaceId: string }>();
   const router = useRouter();
   const toast = useToast();
   const { userId } = useAuth();
@@ -55,7 +55,8 @@ export default function MembersScreen() {
           icon={<ChevronLeft size={22} color={colors.text} />}
           variant="secondary"
           size={40}
-          onPress={() => (router.canGoBack() ? router.back() : router.replace("/"))}
+          onPress={() => (router.canGoBack() ? router.back() : router.replace("/profile"))}
+          accessibilityLabel="Retour"
         />
         <View style={{ flex: 1 }}>
           <AppText variant="title">Membres</AppText>

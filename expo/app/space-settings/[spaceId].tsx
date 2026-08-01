@@ -65,7 +65,7 @@ export default function SpaceSettingsScreen() {
     return (
       <Screen scroll contentStyle={{ paddingHorizontal: spacing.lg }}>
         <View style={{ alignItems: "flex-end", paddingTop: spacing.sm }}>
-          <IconButton icon={<X size={20} color={colors.text} />} onPress={() => router.back()} size={40} />
+          <IconButton icon={<X size={20} color={colors.text} />} onPress={() => router.back()} size={40} accessibilityLabel="Fermer" />
         </View>
         <View style={{ alignItems: "center", marginTop: spacing.xxxl }}>
           <AppText variant="h2">Accès réservé</AppText>
@@ -137,7 +137,7 @@ export default function SpaceSettingsScreen() {
     <Screen scroll contentStyle={{ paddingHorizontal: spacing.lg }}>
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingTop: spacing.sm, marginBottom: spacing.lg }}>
         <AppText variant="title">Paramètres</AppText>
-        <IconButton icon={<X size={20} color={colors.text} />} onPress={() => router.back()} size={40} />
+        <IconButton icon={<X size={20} color={colors.text} />} onPress={() => router.back()} size={40} accessibilityLabel="Fermer" />
       </View>
 
       <FadeIn>

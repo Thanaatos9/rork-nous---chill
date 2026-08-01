@@ -12,6 +12,7 @@ import { colors, spacing } from "@/constants/theme";
 import { friendlyError } from "@/lib/errors";
 import { clearPendingInvite } from "@/lib/pendingInvite";
 import { useJoinSpace } from "@/hooks/useSpaces";
+import { useActiveSpace } from "@/providers/activeSpace";
 import { useToast } from "@/providers/toast";
 
 export default function JoinScreen() {
@@ -19,26 +20,31 @@ export default function JoinScreen() {
   const toast = useToast();
   const params = useLocalSearchParams<{ code?: string }>();
   const joinSpace = useJoinSpace();
+  const { select } = useActiveSpace();
 
   const [code, setCode] = useState<string>(params.code ?? "");
+  const [codeError, setCodeError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
 
   const onJoin = async () => {
     if (!code.trim()) {
-      toast.error("Saisis un code d'invitation.");
+      setCodeError("Saisis un code d'invitation.");
       return;
     }
+    setCodeError(null);
     setLoading(true);
     try {
       const result = await joinSpace.mutateAsync(code);
       await clearPendingInvite();
+      // Make the space we just joined the one the tabs show.
+      select(result.spaceId);
       // Sets expectations before the space dashboard explains the role in full.
       toast.success(
         result.alreadyMember
           ? "Tu fais déjà partie de cet espace."
           : "Bienvenue ! Tu es observateur pour l'instant."
       );
-      router.replace({ pathname: "/space/[id]", params: { id: result.spaceId } });
+      router.replace("/");
     } catch (error) {
       toast.error(friendlyError(error));
     } finally {
@@ -49,7 +55,7 @@ export default function JoinScreen() {
   return (
     <Screen scroll contentStyle={{ paddingHorizontal: spacing.lg }}>
       <View style={{ alignItems: "flex-end", paddingTop: spacing.sm }}>
-        <IconButton icon={<X size={20} color={colors.text} />} onPress={() => router.back()} size={40} />
+        <IconButton icon={<X size={20} color={colors.text} />} onPress={() => router.back()} size={40} accessibilityLabel="Fermer" />
       </View>
 
       <FadeIn>
@@ -66,14 +72,18 @@ export default function JoinScreen() {
 
       <FadeIn delay={120}>
         <Card elevated style={{ gap: spacing.lg }}>
-          <Field label="Code de l'espace">
+          <Field label="Code de l'espace" error={codeError}>
             <Input
               placeholder="Ex. K7M2QX9"
               autoCapitalize="characters"
               autoCorrect={false}
               autoFocus
               value={code}
-              onChangeText={(t) => setCode(t.toUpperCase())}
+              onChangeText={(t) => {
+                setCode(t.toUpperCase());
+                if (codeError) setCodeError(null);
+              }}
+              invalid={!!codeError}
               onSubmitEditing={onJoin}
               returnKeyType="go"
               style={{ letterSpacing: 3, fontWeight: "700" }}

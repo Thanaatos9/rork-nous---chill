@@ -15,6 +15,7 @@ import { registerServiceWorker } from "@/lib/pwa";
 import { queryClient } from "@/lib/queryClient";
 import { establishRecoverySession, isRecoveryUrl } from "@/lib/passwordReset";
 import { setPendingInvite } from "@/lib/pendingInvite";
+import { ActiveSpaceProvider } from "@/providers/activeSpace";
 import { AuthProvider, useAuth } from "@/providers/auth";
 import { NotificationsProvider } from "@/providers/notifications";
 import { ThemeProvider, useThemeMode } from "@/providers/theme";
@@ -88,14 +89,16 @@ function RootNav() {
       <StatusBar style={resolved === "dark" ? "light" : "dark"} />
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}>
         <Stack.Screen name="(auth)" />
-        <Stack.Screen name="index" />
+        <Stack.Screen name="(tabs)" />
         <Stack.Screen name="reset-password" options={{ animation: "fade" }} />
         <Stack.Screen name="onboarding" options={{ presentation: "fullScreenModal", gestureEnabled: false, animation: "fade" }} />
-        <Stack.Screen name="space/[id]" />
+        {/* Redirect shims keeping pre-tabs deep links and notification URLs alive. */}
+        <Stack.Screen name="space/[id]/index" options={{ animation: "none" }} />
+        <Stack.Screen name="space/[id]/[...rest]" options={{ animation: "none" }} />
         <Stack.Screen name="space-settings/[spaceId]" options={{ presentation: "modal" }} />
+        <Stack.Screen name="space-members/[spaceId]" />
         <Stack.Screen name="episode/[episodeId]" />
         <Stack.Screen name="notifications" />
-        <Stack.Screen name="settings" />
         <Stack.Screen name="create-space" options={{ presentation: "modal" }} />
         <Stack.Screen name="join" options={{ presentation: "modal" }} />
         <Stack.Screen name="review/[episodeId]" options={{ presentation: "modal" }} />
@@ -151,12 +154,14 @@ export default function RootLayout() {
         <GestureHandlerRootView style={{ flex: 1 }}>
           <SafeAreaProvider>
             <AuthProvider>
-              <ToastProvider>
-                <NotificationsProvider>
-                  <RootNav />
-                  <ToastViewport />
-                </NotificationsProvider>
-              </ToastProvider>
+              <ActiveSpaceProvider>
+                <ToastProvider>
+                  <NotificationsProvider>
+                    <RootNav />
+                    <ToastViewport />
+                  </NotificationsProvider>
+                </ToastProvider>
+              </ActiveSpaceProvider>
             </AuthProvider>
           </SafeAreaProvider>
         </GestureHandlerRootView>

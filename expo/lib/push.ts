@@ -1,7 +1,30 @@
-import Constants from "expo-constants";
+import Constants, { ExecutionEnvironment } from "expo-constants";
 import * as Device from "expo-device";
-import * as Notifications from "expo-notifications";
 import { supabase } from "@/lib/supabase";
+
+type NotificationsApi = typeof import("expo-notifications");
+
+let notificationsModule: NotificationsApi | null | undefined;
+
+/**
+ * `expo-notifications`, loaded only where it can actually do something.
+ *
+ * Importing it registers a device-push listener at module load, and Expo Go
+ * (SDK 53+) answers that with a full-screen console error because remote push
+ * was removed from the sandbox app. Requiring it lazily keeps the dev overlay
+ * clean; callers treat `null` as "push is unavailable here", which it is.
+ */
+export function loadNotifications(): NotificationsApi | null {
+  if (notificationsModule === undefined) {
+    notificationsModule =
+      Constants.executionEnvironment === ExecutionEnvironment.StoreClient
+        ? null
+        : // A static import would defeat the purpose: it runs at module load.
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          (require("expo-notifications") as NotificationsApi);
+  }
+  return notificationsModule;
+}
 
 /**
  * Push notification token registration.
@@ -31,6 +54,9 @@ export async function getExpoPushToken(): Promise<string | null> {
   try {
     // Cloud simulators and emulators cannot register for remote push.
     if (!Device.isDevice) return null;
+
+    const Notifications = loadNotifications();
+    if (!Notifications) return null;
 
     const settings = await Notifications.getPermissionsAsync();
     let granted = settings.granted;

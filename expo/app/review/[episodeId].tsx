@@ -1,7 +1,7 @@
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { Lock, Music, X } from "lucide-react-native";
-import { useEffect, useState } from "react";
-import { View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { Alert, View } from "react-native";
 import { RatingStars } from "@/components/RatingStars";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Card, Screen } from "@/components/ui/Card";
@@ -30,26 +30,69 @@ export default function ReviewScreen() {
   const [summary, setSummary] = useState<string>("");
   const [song, setSong] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState<boolean>(false);
+
+  /** What was on screen when the form settled — anything else means unsaved work. */
+  const baseline = useRef({ rating: 0, favorite: "", awkward: "", quote: "", summary: "", song: "" });
 
   useEffect(() => {
     if (myReview && !hydrated) {
-      setRating(myReview.rating ?? 0);
-      setFavorite(myReview.favorite_moment ?? "");
-      setAwkward(myReview.awkward_moment ?? "");
-      setQuote(myReview.funny_quote ?? "");
-      setSummary(myReview.summary ?? "");
-      setSong(myReview.song ?? "");
+      const loaded = {
+        rating: myReview.rating ?? 0,
+        favorite: myReview.favorite_moment ?? "",
+        awkward: myReview.awkward_moment ?? "",
+        quote: myReview.funny_quote ?? "",
+        summary: myReview.summary ?? "",
+        song: myReview.song ?? "",
+      };
+      setRating(loaded.rating);
+      setFavorite(loaded.favorite);
+      setAwkward(loaded.awkward);
+      setQuote(loaded.quote);
+      setSummary(loaded.summary);
+      setSong(loaded.song);
+      baseline.current = loaded;
       setHydrated(true);
     }
   }, [myReview, hydrated]);
 
+  const b = baseline.current;
+  const dirty =
+    rating !== b.rating ||
+    favorite !== b.favorite ||
+    awkward !== b.awkward ||
+    quote !== b.quote ||
+    summary !== b.summary ||
+    song !== b.song;
+
+  /**
+   * This screen is a swipe-dismissable modal holding six fields of personal
+   * writing. Losing it to a stray gesture was silent and unrecoverable, so the
+   * gesture is disabled while there is unsaved work and the close button asks.
+   */
+  const closeWithGuard = () => {
+    if (!dirty) {
+      router.back();
+      return;
+    }
+    Alert.alert(
+      "Abandonner ta review ?",
+      "Ce que tu as écrit ne sera pas enregistré.",
+      [
+        { text: "Continuer à écrire", style: "cancel" },
+        { text: "Abandonner", style: "destructive", onPress: () => router.back() },
+      ]
+    );
+  };
+
   const onSubmit = async () => {
     if (!episode) return;
     if (rating === 0 && !favorite.trim() && !summary.trim()) {
-      toast.error("Mets au moins une note ou quelques mots.");
+      setFormError("Mets au moins une note, ou quelques mots sur ce moment.");
       return;
     }
+    setFormError(null);
     setLoading(true);
     try {
       const values: ReviewValues = {
@@ -73,6 +116,7 @@ export default function ReviewScreen() {
 
   return (
     <Screen scroll contentStyle={{ paddingHorizontal: spacing.lg }}>
+      <Stack.Screen options={{ gestureEnabled: !dirty }} />
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingTop: spacing.sm, marginBottom: spacing.lg }}>
         <View style={{ flex: 1, gap: 2 }}>
           <AppText variant="title">Ma review</AppText>
@@ -80,7 +124,7 @@ export default function ReviewScreen() {
             {episode ? `Tes impressions sur « ${episode.title} »` : "Tes impressions, en privé"}
           </AppText>
         </View>
-        <IconButton icon={<X size={20} color={colors.text} />} onPress={() => router.back()} size={40} />
+        <IconButton icon={<X size={20} color={colors.text} />} onPress={closeWithGuard} size={40} accessibilityLabel="Fermer" />
       </View>
 
       <FadeIn>
@@ -120,6 +164,9 @@ export default function ReviewScreen() {
             <Input icon={<Music size={18} color={colors.textFaint} />} placeholder="Titre ou lien musique" value={song} onChangeText={setSong} autoCapitalize="none" />
           </Field>
 
+          {formError ? (
+            <AppText style={{ fontSize: 13, color: colors.destructive, fontWeight: "600" }}>{formError}</AppText>
+          ) : null}
           <Button title="Enregistrer ma review" size="lg" onPress={onSubmit} loading={loading} />
         </View>
       </FadeIn>
