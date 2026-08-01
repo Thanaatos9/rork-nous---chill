@@ -74,6 +74,23 @@ interface CreateSpaceInput {
   seasonEnd: string | null;
 }
 
+/**
+ * Builds a URL-safe slug from a space name plus a short random suffix. The
+ * `spaces.slug` column is NOT NULL (and typically unique), so the client must
+ * provide one — the suffix keeps two identically-named spaces from colliding.
+ */
+function makeSlug(name: string): string {
+  const base = name
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "") // strip accents
+    .replace(/[^a-z0-9]+/g, "-") // non-alphanumerics (incl. emoji) → dashes
+    .replace(/^-+|-+$/g, "") // trim leading/trailing dashes
+    .slice(0, 40);
+  const suffix = Math.random().toString(36).slice(2, 8);
+  return base ? `${base}-${suffix}` : `espace-${suffix}`;
+}
+
 export function useCreateSpace() {
   const { userId } = useAuth();
   const queryClient = useQueryClient();
@@ -83,6 +100,7 @@ export function useCreateSpace() {
         .from("spaces")
         .insert({
           name: input.name.trim(),
+          slug: makeSlug(input.name),
           description: input.description?.trim() || null,
           cover_url: input.coverUrl ?? null,
           created_by: userId,
