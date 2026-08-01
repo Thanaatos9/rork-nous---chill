@@ -153,47 +153,29 @@ export interface JoinResult {
   alreadyMember: boolean;
 }
 
+interface JoinRow {
+  space_id: string;
+  already_member: boolean;
+}
+
 export function useJoinSpace() {
-  const { userId } = useAuth();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (rawCode: string): Promise<JoinResult> => {
       const code = rawCode.trim().toUpperCase();
       if (!code) throw new Error("Saisis un code d'invitation.");
 
-      // One code per space: a valid code resolves to exactly one space.
-      const { data: invite, error } = await supabase
-        .from("invite_codes")
-        .select("id, space_id, use_count")
-        .eq("code", code)
-        .maybeSingle();
+      // Redemption goes through a SECURITY DEFINER function: RLS hides
+      // `invite_codes` from anyone who is not already a member of the space,
+      // which is precisely the person redeeming the code. See
+      // supabase/migrations/20260801010000_join_space_with_code.sql.
+      const { data, error } = await supabase.rpc("join_space_with_code", { p_code: code });
       if (error) throw error;
-      if (!invite) throw new Error("Code d'invitation invalide. Vérifie-le auprès du propriétaire de l'espace.");
 
-      const { data: existing } = await supabase
-        .from("space_members")
-        .select("space_id")
-        .eq("space_id", invite.space_id)
-        .eq("user_id", userId as string)
-        .maybeSingle();
-      if (existing) return { spaceId: invite.space_id as string, alreadyMember: true };
+      const row = (Array.isArray(data) ? data[0] : data) as JoinRow | undefined;
+      if (!row?.space_id) throw new Error("Code invalide. Vérifie-le auprès du propriétaire de l'espace.");
 
-      // Everyone enters as an observer; the owner promotes from the members screen.
-      const { error: joinError } = await supabase.from("space_members").insert({
-        space_id: invite.space_id,
-        user_id: userId,
-        role: "observer",
-        can_create_episodes: false,
-      });
-      if (joinError) throw joinError;
-
-      // Best-effort usage counter (RLS may restrict this to the owner).
-      await supabase
-        .from("invite_codes")
-        .update({ use_count: (invite.use_count ?? 0) + 1 })
-        .eq("id", invite.id);
-
-      return { spaceId: invite.space_id as string, alreadyMember: false };
+      return { spaceId: row.space_id, alreadyMember: !!row.already_member };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: qk.spaces });

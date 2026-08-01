@@ -108,50 +108,27 @@ enum SpaceService {
         return CreateSpaceResult(space: space, inviteCode: inviteCode)
     }
 
+    private nonisolated struct JoinRow: Decodable, Sendable {
+        var spaceId: String
+        var alreadyMember: Bool
+    }
+
     static func joinSpace(rawCode: String, userId: String) async throws -> JoinResult {
         let code = rawCode.trimmed.uppercased()
         guard !code.isEmpty else { throw GatherError.message("Saisis un code d'invitation.") }
 
-        // One code per space: a valid code resolves to exactly one space.
-        let invites: [InviteCode] = try await supabase
-            .from("invite_codes")
-            .select()
-            .eq("code", value: code)
-            .limit(1)
+        // Redemption goes through a SECURITY DEFINER function: RLS hides
+        // `invite_codes` from anyone who is not already a member of the space,
+        // which is precisely the person redeeming the code. See
+        // supabase/migrations/20260801010000_join_space_with_code.sql.
+        let rows: [JoinRow] = try await supabase
+            .rpc("join_space_with_code", params: ["p_code": code])
             .execute()
             .value
-        guard let invite = invites.first, let spaceId = invite.spaceId else {
-            throw GatherError.message("Code d'invitation invalide. Vérifie-le auprès du propriétaire de l'espace.")
+        guard let row = rows.first else {
+            throw GatherError.message("Code invalide. Vérifie-le auprès du propriétaire de l'espace.")
         }
-
-        let existing: [SpaceMember] = try await supabase
-            .from("space_members")
-            .select("space_id, user_id, role, can_create_episodes, joined_at")
-            .eq("space_id", value: spaceId)
-            .eq("user_id", value: userId)
-            .limit(1)
-            .execute()
-            .value
-        if !existing.isEmpty {
-            return JoinResult(spaceId: spaceId, alreadyMember: true)
-        }
-
-        // Everyone enters as an observer; the owner promotes from the members screen.
-        try await supabase.from("space_members").insert([
-            "space_id": AnyJSON.string(spaceId),
-            "user_id": .string(userId),
-            "role": .string(MemberRole.observer.rawValue),
-            "can_create_episodes": .bool(false),
-        ]).execute()
-
-        // Best-effort usage counter (RLS may restrict this to the owner).
-        try? await supabase
-            .from("invite_codes")
-            .update(["use_count": AnyJSON.integer(invite.uses + 1)])
-            .eq("id", value: invite.id)
-            .execute()
-
-        return JoinResult(spaceId: spaceId, alreadyMember: false)
+        return JoinResult(spaceId: row.spaceId, alreadyMember: row.alreadyMember)
     }
 
     static func unlockSeason(id: String) async throws {
