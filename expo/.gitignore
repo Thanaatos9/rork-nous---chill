@@ -3,6 +3,12 @@
 # dependencies
 node_modules/
 
+# bun.lock is the lockfile of record. A committed package-lock.json makes Vercel
+# switch its install from bun to npm, whose strict peer resolution fails on this
+# dependency tree (react 19 vs. older peer ranges).
+package-lock.json
+yarn.lock
+
 # Expo
 .expo/
 dist/
