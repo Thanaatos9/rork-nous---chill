@@ -58,7 +58,7 @@ interface UpsertReviewInput {
 }
 
 export function useUpsertReview() {
-  const { userId } = useAuth();
+  const { userId, profile } = useAuth();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ episodeId, spaceId, values }: UpsertReviewInput): Promise<Review> => {
@@ -82,7 +82,8 @@ export function useUpsertReview() {
 
       const { data, error } = await supabase
         .from("reviews")
-        .insert({ episode_id: episodeId, author_id: userId, space_id: spaceId, ...values })
+        // "author_name" is NOT NULL: snapshot the profile name at write time.
+        .insert({ episode_id: episodeId, author_id: userId, space_id: spaceId, author_name: profile?.name ?? "Membre", ...values })
         .select("*")
         .single();
       if (error) throw error;

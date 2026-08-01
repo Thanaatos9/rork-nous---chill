@@ -53,7 +53,8 @@ export default function ReviewScreen() {
     setLoading(true);
     try {
       const values: ReviewValues = {
-        rating: rating || null,
+        // "rating" is NOT NULL in the DB; 0 stands for "no note given".
+        rating,
         favorite_moment: favorite.trim() || null,
         awkward_moment: awkward.trim() || null,
         funny_quote: quote.trim() || null,
