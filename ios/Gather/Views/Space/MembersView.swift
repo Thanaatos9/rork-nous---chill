@@ -6,8 +6,6 @@ struct MembersView: View {
     @Environment(ToastCenter.self) private var toasts
     @Environment(\.dismiss) private var dismiss
 
-    @State private var invites: [InviteCode] = []
-    @State private var composingInvite = false
     @State private var memberToRemove: SpaceMember?
 
     var body: some View {
@@ -25,16 +23,17 @@ struct MembersView: View {
                     }
                     .padding(.bottom, Spacing.xs)
 
+                    if store.isOwner {
+                        SpaceInviteCard(spaceId: store.spaceId, spaceName: store.space?.name ?? "notre espace")
+                            .padding(.bottom, Spacing.md)
+                    }
+
                     if store.loadingMembers && store.members.isEmpty {
                         Loader(label: "Chargement des membres…").frame(height: 200)
                     } else {
                         ForEach(Array(store.members.enumerated()), id: \.element.id) { i, member in
                             memberCard(member, index: i)
                         }
-                    }
-
-                    if store.isOwner {
-                        invitesSection.padding(.top, Spacing.xl)
                     }
                 }
                 .padding(.horizontal, Spacing.lg)
@@ -44,10 +43,8 @@ struct MembersView: View {
             .safeAreaPadding(.top, 50)
             .refreshable {
                 await store.reloadMembers()
-                await loadInvites()
             }
         }
-        .task(id: store.isOwner) { if store.isOwner { await loadInvites() } }
         .alert("Retirer ce membre ?", isPresented: Binding(get: { memberToRemove != nil }, set: { if !$0 { memberToRemove = nil } })) {
             Button("Annuler", role: .cancel) { memberToRemove = nil }
             Button("Retirer", role: .destructive) {
@@ -107,46 +104,7 @@ struct MembersView: View {
         .floatIn(delay: Double(index) * 0.04)
     }
 
-    // MARK: - Invites
-
-    private var invitesSection: some View {
-        VStack(alignment: .leading, spacing: Spacing.md) {
-            SectionHeader("Codes d'invitation") {
-                Button { withAnimation { composingInvite.toggle() } } label: {
-                    Text(composingInvite ? "Fermer" : "Nouveau").font(.system(size: 13, weight: .bold)).foregroundStyle(Palette.primary)
-                }
-                .buttonStyle(.plain)
-            }
-
-            if composingInvite {
-                InviteComposer(spaceId: store.spaceId) {
-                    composingInvite = false
-                    await loadInvites()
-                }
-                .floatIn()
-            }
-
-            if invites.isEmpty && !composingInvite {
-                GatherCard {
-                    VStack(spacing: 6) {
-                        Image(systemName: "ticket").font(.system(size: 22)).foregroundStyle(Palette.textMuted)
-                        Text("Crée un code pour inviter de nouvelles personnes.").gType(.bodyMuted).multilineTextAlignment(.center)
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-            } else {
-                ForEach(invites) { invite in
-                    InviteRow(invite: invite) { await loadInvites() }
-                }
-            }
-        }
-    }
-
     // MARK: - Actions
-
-    private func loadInvites() async {
-        invites = (try? await MemberService.inviteCodes(spaceId: store.spaceId)) ?? []
-    }
 
     private func togglePromotion(_ member: SpaceMember, participating: Bool) {
         Task {
@@ -171,139 +129,117 @@ struct MembersView: View {
     }
 }
 
-private struct InviteComposer: View {
+/// The space's single invite code: one address to share with everyone, rather
+/// than one ticket per person. Regenerating it invalidates the previous code.
+private struct SpaceInviteCard: View {
     var spaceId: String
-    var onCreated: () async -> Void
+    var spaceName: String
 
     @Environment(AppState.self) private var app
     @Environment(ToastCenter.self) private var toasts
 
-    @State private var role: MemberRole = .member
-    @State private var maxUses = ""
-    @State private var hasExpiry = false
-    @State private var expiry = Calendar.current.date(byAdding: .month, value: 1, to: Date()) ?? Date()
-    @State private var saving = false
+    @State private var invite: InviteCode?
+    @State private var loading = true
+    @State private var working = false
+    @State private var confirmRegenerate = false
 
     var body: some View {
-        GatherCard(elevated: true) {
-            VStack(spacing: Spacing.md) {
-                Field(label: "Rôle attribué") {
-                    HStack(spacing: Spacing.sm) {
-                        roleButton(.member, "Membre")
-                        roleButton(.observer, "Observateur")
-                    }
-                }
-                HStack(spacing: Spacing.md) {
-                    Field(label: "Usages max") {
-                        GatherTextField(placeholder: "Illimité", text: $maxUses, keyboard: .numberPad)
-                    }
-                    Field(label: "Expiration") {
-                        VStack(spacing: 6) {
-                            Toggle("Expire", isOn: $hasExpiry).tint(Palette.primary).font(.system(size: 13, weight: .semibold))
-                            if hasExpiry {
-                                DatePickerChip(date: $expiry, range: Date()...)
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            SectionHeader("Code de l'espace")
+            GatherCard(elevated: true, glow: true) {
+                VStack(spacing: Spacing.md) {
+                    VStack(spacing: Spacing.sm) {
+                        if let code = invite?.code {
+                            Text(code)
+                                .font(.system(size: 34, weight: .heavy))
+                                .tracking(6)
+                                .foregroundStyle(Palette.text)
+                        } else {
+                            Group {
+                                if loading || working {
+                                    ProgressView().tint(Palette.primary)
+                                } else {
+                                    Text("Code indisponible").gType(.bodyMuted)
+                                }
                             }
+                            .frame(height: 42)
                         }
+                        Text("Un seul code pour tout l'espace. Chaque personne qui l'utilise rejoint en observateur — tu l'autorises ensuite à participer ci-dessous.")
+                            .gType(.bodyMuted)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: 300)
                     }
-                }
-                GatherButton("Générer le code", systemIcon: "plus", loading: saving, fullWidth: true, action: create)
-            }
-        }
-    }
+                    .frame(maxWidth: .infinity)
 
-    private func roleButton(_ r: MemberRole, _ label: String) -> some View {
-        Button { role = r } label: {
-            Text(label)
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(role == r ? .white : Palette.textMuted)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 11)
-                .background(role == r ? Palette.primary : Palette.surface, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
-        }
-        .buttonStyle(PressableStyle(scale: 0.97, haptic: false))
-    }
-
-    private func create() {
-        guard let uid = app.userId else { return }
-        saving = true
-        Task {
-            do {
-                let max = Int(maxUses.filter { $0.isNumber })
-                _ = try await MemberService.createInvite(
-                    spaceId: spaceId, userId: uid, role: role,
-                    maxUses: (maxUses.isEmpty ? nil : max),
-                    expiresAt: hasExpiry ? ISO8601DateFormatter().string(from: expiry) : nil
-                )
-                toasts.success("Code créé")
-                await onCreated()
-            } catch {
-                toasts.error(FriendlyError.message(error))
-            }
-            saving = false
-        }
-    }
-}
-
-private struct InviteRow: View {
-    var invite: InviteCode
-    var onChange: () async -> Void
-
-    @Environment(ToastCenter.self) private var toasts
-    @State private var confirmRevoke = false
-
-    var body: some View {
-        GatherCard {
-            VStack(spacing: Spacing.md) {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(invite.code).font(.system(size: 22, weight: .heavy)).tracking(4).foregroundStyle(Palette.text)
-                        HStack(spacing: 6) {
-                            BadgeView(invite.role == .member ? "Membre" : "Observateur", tone: invite.role == .member ? .primary : .muted)
-                            if invite.isExpired || invite.isExhausted {
-                                BadgeView(invite.isExpired ? "Expiré" : "Épuisé", tone: .destructive)
-                            }
-                        }
-                    }
-                    Spacer()
-                    Button { confirmRevoke = true } label: {
-                        Image(systemName: "trash").font(.system(size: 17)).foregroundStyle(Palette.textFaint)
-                    }
-                    .buttonStyle(.plain)
-                }
-                HStack {
-                    Text(usageText).gType(.caption)
-                    Spacer()
-                    HStack(spacing: Spacing.sm) {
-                        IconButton(systemIcon: "doc.on.doc", variant: .secondary, size: 38) {
-                            UIPasteboard.general.string = invite.code
+                    HStack(spacing: Spacing.md) {
+                        GatherButton("Copier", systemIcon: "doc.on.doc", variant: .secondary,
+                                     disabled: invite == nil, fullWidth: true) {
+                            guard let code = invite?.code else { return }
+                            UIPasteboard.general.string = code
                             toasts.success("Code copié")
                         }
-                        ShareLink(item: "Rejoins notre espace sur Gather 🎬\nCode : \(invite.code)") {
-                            Image(systemName: "square.and.arrow.up").font(.system(size: 16, weight: .semibold))
-                                .foregroundStyle(.white).frame(width: 38, height: 38)
-                                .background(Palette.primary, in: Circle())
+                        if let code = invite?.code {
+                            ShareLink(item: "Rejoins « \(spaceName) » sur Gather 🎬\nCode : \(code)") {
+                                HStack(spacing: 9) {
+                                    Image(systemName: "square.and.arrow.up").font(.system(size: 17, weight: .semibold))
+                                    Text("Partager").font(.system(size: 15, weight: .bold))
+                                }
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity).frame(height: 48)
+                                .background(Palette.primary, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
+                            }
                         }
+                    }
+
+                    Divider2()
+
+                    HStack {
+                        Text(usageText).gType(.caption)
+                        Spacer()
+                        Button { confirmRegenerate = true } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "arrow.triangle.2.circlepath").font(.system(size: 14))
+                                Text("Régénérer").font(.system(size: 13, weight: .bold))
+                            }
+                            .foregroundStyle(Palette.textMuted)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(working)
                     }
                 }
             }
         }
-        .alert("Révoquer ce code ?", isPresented: $confirmRevoke) {
+        .task { await load() }
+        .alert("Régénérer le code ?", isPresented: $confirmRegenerate) {
             Button("Annuler", role: .cancel) {}
-            Button("Révoquer", role: .destructive) {
-                Task {
-                    do { try await MemberService.revokeInvite(id: invite.id); await onChange() }
-                    catch { toasts.error(FriendlyError.message(error)) }
-                }
-            }
+            Button("Régénérer", role: .destructive) { regenerate() }
         } message: {
-            Text("Il ne pourra plus être utilisé.")
+            Text("L'ancien code cessera immédiatement de fonctionner. Les membres déjà présents gardent leur accès.")
         }
     }
 
     private var usageText: String {
-        var s = "\(invite.uses) utilisation\(invite.uses > 1 ? "s" : "")"
-        if let max = invite.maxUses { s += " / \(max)" }
-        if let exp = invite.expiresAt { s += " · exp. \(DateParse.formatDate(exp))" }
-        return s
+        guard let invite else { return " " }
+        return "\(invite.uses) arrivée\(invite.uses > 1 ? "s" : "") via ce code"
+    }
+
+    private func load() async {
+        guard let uid = app.userId else { loading = false; return }
+        invite = try? await MemberService.spaceInviteCode(spaceId: spaceId, userId: uid)
+        loading = false
+    }
+
+    private func regenerate() {
+        guard let uid = app.userId else { return }
+        working = true
+        Task {
+            do {
+                invite = try await MemberService.regenerateInviteCode(spaceId: spaceId, userId: uid)
+                toasts.success("Nouveau code généré")
+            } catch {
+                toasts.error(FriendlyError.message(error))
+            }
+            working = false
+        }
     }
 }

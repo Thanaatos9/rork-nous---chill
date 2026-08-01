@@ -1,17 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ensureSpaceInviteCode, regenerateSpaceInviteCode } from "@/lib/invites";
 import { qk } from "@/lib/keys";
 import { getProfilesMap } from "@/lib/profiles";
 import { supabase } from "@/lib/supabase";
 import type { InviteCode, MemberRole, SpaceMember } from "@/lib/types";
 import { useAuth } from "@/providers/auth";
-
-const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-
-function generateCode(length = 7): string {
-  let out = "";
-  for (let i = 0; i < length; i++) out += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
-  return out;
-}
 
 export function useMembers(spaceId: string) {
   return useQuery({
@@ -71,65 +64,27 @@ export function useRemoveMember() {
   });
 }
 
-export function useInviteCodes(spaceId: string, enabled = true) {
+/**
+ * The space's single invite code. Created on first read for spaces that predate
+ * this model (or whose code was never generated).
+ */
+export function useSpaceInviteCode(spaceId: string, enabled = true) {
+  const { userId } = useAuth();
   return useQuery({
-    queryKey: qk.invites(spaceId),
-    enabled: !!spaceId && enabled,
-    queryFn: async (): Promise<InviteCode[]> => {
-      const { data, error } = await supabase
-        .from("invite_codes")
-        .select("*")
-        .eq("space_id", spaceId)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as InviteCode[];
-    },
+    queryKey: qk.invite(spaceId),
+    enabled: !!spaceId && !!userId && enabled,
+    queryFn: (): Promise<InviteCode> => ensureSpaceInviteCode(spaceId, userId as string),
   });
 }
 
-interface CreateInviteInput {
-  spaceId: string;
-  role: MemberRole;
-  maxUses: number | null;
-  expiresAt: string | null;
-}
-
-export function useCreateInviteCode() {
+/** Rolls the space code — the previous one stops working immediately. */
+export function useRegenerateInviteCode(spaceId: string) {
   const { userId } = useAuth();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ spaceId, role, maxUses, expiresAt }: CreateInviteInput): Promise<InviteCode> => {
-      const { data, error } = await supabase
-        .from("invite_codes")
-        .insert({
-          code: generateCode(),
-          space_id: spaceId,
-          role,
-          max_uses: maxUses,
-          use_count: 0,
-          expires_at: expiresAt,
-          created_by: userId,
-        })
-        .select("*")
-        .single();
-      if (error) throw error;
-      return data as InviteCode;
-    },
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: qk.invites(variables.spaceId) });
-    },
-  });
-}
-
-export function useRevokeInviteCode(spaceId: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (codeId: string): Promise<void> => {
-      const { error } = await supabase.from("invite_codes").delete().eq("id", codeId);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: qk.invites(spaceId) });
+    mutationFn: (): Promise<InviteCode> => regenerateSpaceInviteCode(spaceId, userId as string),
+    onSuccess: (invite) => {
+      queryClient.setQueryData(qk.invite(spaceId), invite);
     },
   });
 }

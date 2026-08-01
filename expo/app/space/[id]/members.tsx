@@ -1,23 +1,19 @@
 import * as Clipboard from "expo-clipboard";
 import * as Linking from "expo-linking";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { ChevronLeft, Copy, Plus, Share2, Ticket, Trash2, X } from "lucide-react-native";
-import React, { useState } from "react";
-import { Alert, RefreshControl, Share, Switch, TouchableOpacity, View } from "react-native";
+import { ChevronLeft, Copy, RefreshCw, Share2, Trash2 } from "lucide-react-native";
+import { ActivityIndicator, Alert, RefreshControl, Share, Switch, TouchableOpacity, View } from "react-native";
 import { Avatar } from "@/components/ui/Avatar";
-import { Badge, RoleBadge } from "@/components/ui/Badge";
+import { RoleBadge } from "@/components/ui/Badge";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Card, Divider, Screen, SectionHeader } from "@/components/ui/Card";
 import { Loader } from "@/components/ui/Feedback";
-import { DateField } from "@/components/ui/DateField";
-import { FadeIn, PressableScale } from "@/components/ui/motion";
-import { Field, Input } from "@/components/ui/Input";
+import { FadeIn } from "@/components/ui/motion";
 import { AppText } from "@/components/ui/Text";
-import { colors, radius, spacing } from "@/constants/theme";
+import { colors, spacing } from "@/constants/theme";
 import { friendlyError } from "@/lib/errors";
-import { formatDate } from "@/lib/format";
-import { canParticipate, effectiveRole, isOwner, type MemberRole } from "@/lib/types";
-import { useCreateInviteCode, useInviteCodes, useMembers, useRemoveMember, useRevokeInviteCode, useUpdateMember } from "@/hooks/useMembers";
+import { canParticipate, effectiveRole, isOwner } from "@/lib/types";
+import { useMembers, useRegenerateInviteCode, useRemoveMember, useSpaceInviteCode, useUpdateMember } from "@/hooks/useMembers";
 import { useSpace } from "@/hooks/useSpaces";
 import { useAuth } from "@/providers/auth";
 import { useToast } from "@/providers/toast";
@@ -31,12 +27,8 @@ export default function MembersScreen() {
   const owner = isOwner(space?.membership);
 
   const { data: members, isLoading, refetch, isRefetching } = useMembers(id);
-  const { data: invites } = useInviteCodes(id, owner);
   const updateMember = useUpdateMember();
   const removeMember = useRemoveMember();
-  const createInvite = useCreateInviteCode();
-
-  const [composingInvite, setComposingInvite] = useState<boolean>(false);
 
   const togglePromotion = (memberUserId: string, currentlyParticipating: boolean) => {
     updateMember.mutate(
@@ -70,6 +62,8 @@ export default function MembersScreen() {
           <AppText variant="caption">{members?.length ?? 0} personne{(members?.length ?? 0) > 1 ? "s" : ""} dans l&apos;aventure</AppText>
         </View>
       </View>
+
+      {owner ? <SpaceInviteCard spaceId={id} spaceName={space?.name ?? "notre espace"} /> : null}
 
       {isLoading ? (
         <Loader label="Chargement des membres…" />
@@ -124,145 +118,95 @@ export default function MembersScreen() {
           })}
         </View>
       )}
-
-      {owner ? (
-        <View style={{ marginTop: spacing.xxl }}>
-          <SectionHeader
-            title="Codes d'invitation"
-            action={
-              <PressableScale onPress={() => setComposingInvite((v) => !v)} withHaptic={false}>
-                <AppText style={{ color: colors.primary, fontWeight: "700", fontSize: 13 }}>{composingInvite ? "Fermer" : "Nouveau"}</AppText>
-              </PressableScale>
-            }
-          />
-
-          {composingInvite ? (
-            <InviteComposer
-              spaceId={id}
-              onCreated={() => setComposingInvite(false)}
-              createInvite={createInvite}
-            />
-          ) : null}
-
-          {(invites ?? []).length === 0 && !composingInvite ? (
-            <Card style={{ alignItems: "center", gap: 6 }}>
-              <Ticket size={22} color={colors.textMuted} />
-              <AppText variant="bodyMuted" center>Crée un code pour inviter de nouvelles personnes.</AppText>
-            </Card>
-          ) : (
-            <View style={{ gap: spacing.md, marginTop: composingInvite ? spacing.md : 0 }}>
-              {(invites ?? []).map((invite) => (
-                <InviteRow key={invite.id} invite={invite} spaceId={id} />
-              ))}
-            </View>
-          )}
-        </View>
-      ) : null}
     </Screen>
   );
 }
 
-function InviteComposer({ spaceId, onCreated, createInvite }: { spaceId: string; onCreated: () => void; createInvite: ReturnType<typeof useCreateInviteCode> }) {
+/**
+ * The space's single invite code: one address to share with everyone, rather
+ * than one ticket per person. Regenerating it invalidates the previous code.
+ */
+function SpaceInviteCard({ spaceId, spaceName }: { spaceId: string; spaceName: string }) {
   const toast = useToast();
-  const [role, setRole] = useState<MemberRole>("member");
-  const [maxUses, setMaxUses] = useState<string>("");
-  const [expiry, setExpiry] = useState<Date | null>(null);
-  const [saving, setSaving] = useState<boolean>(false);
+  const { data: invite, isLoading, error } = useSpaceInviteCode(spaceId);
+  const regenerate = useRegenerateInviteCode(spaceId);
 
-  const create = async () => {
-    setSaving(true);
-    try {
-      await createInvite.mutateAsync({
-        spaceId,
-        role,
-        maxUses: maxUses.trim() ? Number(maxUses.replace(/[^0-9]/g, "")) || null : null,
-        expiresAt: expiry ? expiry.toISOString() : null,
-      });
-      toast.success("Code créé");
-      onCreated();
-    } catch (e) {
-      toast.error(friendlyError(e));
-    } finally {
-      setSaving(false);
-    }
+  const code = invite?.code ?? null;
+  const arrivals = invite?.use_count ?? 0;
+  const link = code ? Linking.createURL("join", { queryParams: { code } }) : null;
+
+  const copy = async () => {
+    if (!code) return;
+    await Clipboard.setStringAsync(code);
+    toast.success("Code copié");
+  };
+
+  const share = async () => {
+    if (!code) return;
+    await Share.share({ message: `Rejoins « ${spaceName} » sur Gather 🎬\nCode : ${code}${link ? `\n${link}` : ""}` });
+  };
+
+  const confirmRegenerate = () => {
+    Alert.alert(
+      "Régénérer le code ?",
+      "L'ancien code cessera immédiatement de fonctionner. Les membres déjà présents gardent leur accès.",
+      [
+        { text: "Annuler", style: "cancel" },
+        {
+          text: "Régénérer",
+          style: "destructive",
+          onPress: () =>
+            regenerate.mutate(undefined, {
+              onSuccess: () => toast.success("Nouveau code généré"),
+              onError: (e) => toast.error(friendlyError(e)),
+            }),
+        },
+      ]
+    );
   };
 
   return (
     <FadeIn>
-      <Card elevated style={{ gap: spacing.md, marginBottom: spacing.md }}>
-        <Field label="Rôle attribué">
-          <View style={{ flexDirection: "row", gap: spacing.sm }}>
-            {(["member", "observer"] as MemberRole[]).map((r) => (
-              <PressableScale key={r} onPress={() => setRole(r)} withHaptic={false} style={{ flex: 1, paddingVertical: 11, borderRadius: radius.md, alignItems: "center", backgroundColor: role === r ? colors.primary : colors.surface }}>
-                <AppText style={{ fontWeight: "700", fontSize: 14, color: role === r ? "#fff" : colors.textMuted }}>{r === "member" ? "Membre" : "Observateur"}</AppText>
-              </PressableScale>
-            ))}
+      <View style={{ marginBottom: spacing.xxl }}>
+        <SectionHeader title="Code de l'espace" />
+        <Card elevated glow style={{ gap: spacing.md }}>
+          <View style={{ alignItems: "center", gap: spacing.sm }}>
+            {code ? (
+              <AppText style={{ fontSize: 34, fontWeight: "800", letterSpacing: 6, color: colors.text }}>{code}</AppText>
+            ) : (
+              <View style={{ height: 42, justifyContent: "center" }}>
+                {isLoading || regenerate.isPending ? (
+                  <ActivityIndicator color={colors.primary} />
+                ) : (
+                  <AppText variant="bodyMuted">Code indisponible</AppText>
+                )}
+              </View>
+            )}
+            <AppText variant="bodyMuted" center style={{ maxWidth: 300 }}>
+              Un seul code pour tout l&apos;espace. Chaque personne qui l&apos;utilise rejoint en observateur —
+              tu l&apos;autorises ensuite à participer ci-dessous.
+            </AppText>
           </View>
-        </Field>
-        <View style={{ flexDirection: "row", gap: spacing.md }}>
-          <View style={{ flex: 1 }}>
-            <Field label="Usages max">
-              <Input placeholder="Illimité" keyboardType="number-pad" value={maxUses} onChangeText={setMaxUses} />
-            </Field>
+
+          <View style={{ flexDirection: "row", gap: spacing.md }}>
+            <Button title="Copier" variant="secondary" icon={<Copy size={17} color={colors.text} />} onPress={copy} disabled={!code} style={{ flex: 1 }} />
+            <Button title="Partager" icon={<Share2 size={17} color={colors.primaryFg} />} onPress={share} disabled={!code} style={{ flex: 1 }} />
           </View>
-          <View style={{ flex: 1.2 }}>
-            <DateField label="Expiration" value={expiry} onChange={setExpiry} minimumDate={new Date()} placeholder="Jamais" />
+
+          <Divider />
+
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+            <AppText variant="caption" style={{ flex: 1 }}>
+              {invite ? `${arrivals} arrivée${arrivals > 1 ? "s" : ""} via ce code` : error ? friendlyError(error) : " "}
+            </AppText>
+            <TouchableOpacity onPress={confirmRegenerate} disabled={regenerate.isPending} hitSlop={8} style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <RefreshCw size={14} color={colors.textMuted} />
+              <AppText style={{ color: colors.textMuted, fontWeight: "700", fontSize: 13 }}>Régénérer</AppText>
+            </TouchableOpacity>
           </View>
-        </View>
-        <Button title="Générer le code" onPress={create} loading={saving} icon={<Plus size={17} color={colors.primaryFg} />} />
-      </Card>
+        </Card>
+      </View>
     </FadeIn>
   );
 }
 
-function InviteRow({ invite, spaceId }: { invite: { id: string; code: string; role: MemberRole; max_uses: number | null; use_count: number; expires_at: string | null }; spaceId: string }) {
-  const toast = useToast();
-  const revoke = useRevokeInviteCode(spaceId);
-
-  const link = Linking.createURL("join", { queryParams: { code: invite.code } });
-  const copy = async () => {
-    await Clipboard.setStringAsync(invite.code);
-    toast.success("Code copié");
-  };
-  const share = async () => {
-    await Share.share({ message: `Rejoins notre espace sur Gather 🎬\nCode : ${invite.code}\n${link}` });
-  };
-  const confirmRevoke = () => {
-    Alert.alert("Révoquer ce code ?", "Il ne pourra plus être utilisé.", [
-      { text: "Annuler", style: "cancel" },
-      { text: "Révoquer", style: "destructive", onPress: () => revoke.mutate(invite.id, { onError: (e) => toast.error(friendlyError(e)) }) },
-    ]);
-  };
-
-  const expired = invite.expires_at ? new Date(invite.expires_at).getTime() < Date.now() : false;
-  const exhausted = invite.max_uses != null && invite.use_count >= invite.max_uses;
-
-  return (
-    <Card style={{ gap: spacing.md }}>
-      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-        <View style={{ gap: 4 }}>
-          <AppText style={{ fontSize: 22, fontWeight: "800", letterSpacing: 4, color: colors.text }}>{invite.code}</AppText>
-          <View style={{ flexDirection: "row", gap: 6, alignItems: "center" }}>
-            <Badge label={invite.role === "member" ? "Membre" : "Observateur"} tone={invite.role === "member" ? "primary" : "muted"} />
-            {expired || exhausted ? <Badge label={expired ? "Expiré" : "Épuisé"} tone="destructive" /> : null}
-          </View>
-        </View>
-        <TouchableOpacity onPress={confirmRevoke} hitSlop={8}>
-          <Trash2 size={17} color={colors.textFaint} />
-        </TouchableOpacity>
-      </View>
-
-      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-        <AppText variant="caption">
-          {invite.use_count} utilisation{invite.use_count > 1 ? "s" : ""}
-          {invite.max_uses != null ? ` / ${invite.max_uses}` : ""}
-          {invite.expires_at ? ` · exp. ${formatDate(invite.expires_at)}` : ""}
-        </AppText>
-        <View style={{ flexDirection: "row", gap: spacing.sm }}>
-          <IconButton icon={<Copy size={16} color={colors.text} />} onPress={copy} variant="secondary" size={38} />
-          <IconButton icon={<Share2 size={16} color={colors.primaryFg} />} onPress={share} variant="primary" size={38} />
-        </View>
-      </View>
-    </Card>
-  );
-}

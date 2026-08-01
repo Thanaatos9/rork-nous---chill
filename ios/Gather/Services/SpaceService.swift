@@ -56,6 +56,12 @@ enum SpaceService {
         return SpaceDetail(space: space, membership: memberships.first)
     }
 
+    struct CreateSpaceResult {
+        var space: Space
+        /// Nil only if the code could not be generated — the space itself is fine.
+        var inviteCode: InviteCode?
+    }
+
     static func createSpace(
         userId: String,
         name: String,
@@ -63,7 +69,7 @@ enum SpaceService {
         coverUrl: String?,
         seasonStart: String?,
         seasonEnd: String?
-    ) async throws -> Space {
+    ) async throws -> CreateSpaceResult {
         let payload: [String: AnyJSON] = [
             "name": .string(name.trimmed),
             "description": description.trimmed.isEmpty ? .null : .string(description.trimmed),
@@ -95,13 +101,18 @@ enum SpaceService {
                 throw error
             }
         }
-        return space
+
+        // Every space owns one permanent invite code from birth. Best-effort:
+        // the members screen creates it later if this failed.
+        let inviteCode = try? await MemberService.spaceInviteCode(spaceId: space.id, userId: userId)
+        return CreateSpaceResult(space: space, inviteCode: inviteCode)
     }
 
     static func joinSpace(rawCode: String, userId: String) async throws -> JoinResult {
         let code = rawCode.trimmed.uppercased()
         guard !code.isEmpty else { throw GatherError.message("Saisis un code d'invitation.") }
 
+        // One code per space: a valid code resolves to exactly one space.
         let invites: [InviteCode] = try await supabase
             .from("invite_codes")
             .select()
@@ -110,10 +121,8 @@ enum SpaceService {
             .execute()
             .value
         guard let invite = invites.first, let spaceId = invite.spaceId else {
-            throw GatherError.message("Code d'invitation invalide ou expiré.")
+            throw GatherError.message("Code d'invitation invalide. Vérifie-le auprès du propriétaire de l'espace.")
         }
-        if invite.isExpired { throw GatherError.message("Ce code d'invitation a expiré.") }
-        if invite.isExhausted { throw GatherError.message("Ce code a atteint sa limite d'utilisation.") }
 
         let existing: [SpaceMember] = try await supabase
             .from("space_members")
@@ -127,14 +136,15 @@ enum SpaceService {
             return JoinResult(spaceId: spaceId, alreadyMember: true)
         }
 
+        // Everyone enters as an observer; the owner promotes from the members screen.
         try await supabase.from("space_members").insert([
             "space_id": AnyJSON.string(spaceId),
             "user_id": .string(userId),
-            "role": .string(invite.role.rawValue),
+            "role": .string(MemberRole.observer.rawValue),
             "can_create_episodes": .bool(false),
         ]).execute()
 
-        // Best-effort usage increment (RLS may restrict this to the owner).
+        // Best-effort usage counter (RLS may restrict this to the owner).
         try? await supabase
             .from("invite_codes")
             .update(["use_count": AnyJSON.integer(invite.uses + 1)])

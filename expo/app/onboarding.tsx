@@ -39,7 +39,7 @@ const SLIDES: Slide[] = [
     key: "invite",
     overline: "Épisode 2",
     title: "Invite tes proches",
-    body: "Partage le code d'invitation et retrouvez-vous dans le même espace. Tout le monde fait partie du casting.",
+    body: "Un seul code par espace : partage-le et retrouvez-vous au même endroit. Tout le monde fait partie du casting.",
     icon: "invite",
   },
   {

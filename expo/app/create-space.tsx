@@ -18,7 +18,6 @@ import { colors, radius, spacing } from "@/constants/theme";
 import { friendlyError } from "@/lib/errors";
 import { PickedAsset, pickCoverImage, uploadMedia } from "@/lib/media";
 import type { Space } from "@/lib/types";
-import { useCreateInviteCode } from "@/hooks/useMembers";
 import { useCreateSpace, useUpdateSpace } from "@/hooks/useSpaces";
 import { useAuth } from "@/providers/auth";
 import { useToast } from "@/providers/toast";
@@ -34,7 +33,6 @@ export default function CreateSpaceScreen() {
   const toast = useToast();
   const createSpace = useCreateSpace();
   const updateSpace = useUpdateSpace();
-  const createInvite = useCreateInviteCode();
   const { userId } = useAuth();
 
   const [name, setName] = useState<string>("");
@@ -69,7 +67,7 @@ export default function CreateSpaceScreen() {
     try {
       // The storage policy only accepts paths starting with a space uuid, so
       // the space is created first and the cover is uploaded under its id.
-      const space = await createSpace.mutateAsync({
+      const { space, inviteCode } = await createSpace.mutateAsync({
         name,
         description,
         coverUrl: null,
@@ -88,20 +86,7 @@ export default function CreateSpaceScreen() {
         }
       }
 
-      let code: string | null = null;
-      try {
-        const invite = await createInvite.mutateAsync({
-          spaceId: space.id,
-          role: "member",
-          maxUses: null,
-          expiresAt: null,
-        });
-        code = invite.code;
-      } catch {
-        // Invite creation is a nice-to-have; the space already exists.
-      }
-
-      setCreated({ space, code });
+      setCreated({ space, code: inviteCode?.code ?? null });
     } catch (error) {
       toast.error(friendlyError(error));
     } finally {
@@ -135,7 +120,8 @@ export default function CreateSpaceScreen() {
             </View>
             <AppText variant="title" center>« {created.space.name} » est prêt</AppText>
             <AppText variant="bodyMuted" center style={{ maxWidth: 300 }}>
-              Partage ce code pour inviter ta bande. Ils rejoindront avec le rôle Membre.
+              Voici le code de ton espace. Partage-le à ta bande : il est unique, permanent, et fonctionne
+              pour tout le monde.
             </AppText>
           </View>
         </FadeIn>
@@ -143,7 +129,7 @@ export default function CreateSpaceScreen() {
         {created.code ? (
           <FadeIn delay={120}>
             <Card elevated glow style={{ marginTop: spacing.xxl, alignItems: "center", gap: spacing.md }}>
-              <AppText variant="overline">Code d&apos;invitation</AppText>
+              <AppText variant="overline">Code de l&apos;espace</AppText>
               <AppText style={{ fontSize: 38, fontWeight: "800", letterSpacing: 6, color: colors.text }}>{created.code}</AppText>
               <View style={{ flexDirection: "row", gap: spacing.md, alignSelf: "stretch" }}>
                 <Button title="Copier" variant="secondary" icon={<Copy size={17} color={colors.text} />} onPress={copyCode} style={{ flex: 1 }} />

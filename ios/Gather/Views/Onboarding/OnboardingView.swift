@@ -33,7 +33,7 @@ private let slides: [OnboardingSlide] = [
         id: "invite",
         overline: "Épisode 2",
         title: "Invite tes proches",
-        body: "Partage le code d'invitation et retrouvez-vous dans le même espace. Tout le monde fait partie du casting.",
+        body: "Un seul code par espace : partage-le et retrouvez-vous au même endroit. Tout le monde fait partie du casting.",
         art: .invite
     ),
     OnboardingSlide(

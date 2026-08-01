@@ -155,7 +155,7 @@ struct CreateSpaceView: View {
                         .frame(width: 84, height: 84)
                         .background(Palette.primarySoft, in: Circle())
                     Text("« \(space.name) » est prêt").gType(.title).multilineTextAlignment(.center)
-                    Text("Partage ce code pour inviter ta bande. Ils rejoindront avec le rôle Membre.")
+                    Text("Voici le code de ton espace. Partage-le à ta bande : il est unique, permanent, et fonctionne pour tout le monde.")
                         .gType(.bodyMuted).multilineTextAlignment(.center).frame(maxWidth: 300)
                 }
                 .padding(.top, Spacing.lg)
@@ -163,7 +163,7 @@ struct CreateSpaceView: View {
                 if let code = createdCode {
                     GatherCard(elevated: true, glow: true) {
                         VStack(spacing: Spacing.md) {
-                            Text("Code d'invitation").gType(.overline)
+                            Text("Code de l'espace").gType(.overline)
                             Text(code)
                                 .font(.system(size: 38, weight: .heavy))
                                 .tracking(6)
@@ -214,11 +214,12 @@ struct CreateSpaceView: View {
             do {
                 // The storage policy only accepts paths starting with a space uuid,
                 // so the space is created first and the cover uploaded under its id.
-                var space = try await SpaceService.createSpace(
+                let result = try await SpaceService.createSpace(
                     userId: uid, name: name, description: description, coverUrl: nil,
                     seasonStart: ISO8601DateFormatter().string(from: start),
                     seasonEnd: ISO8601DateFormatter().string(from: end)
                 )
+                var space = result.space
                 if let coverData {
                     do {
                         let coverUrl = try await StorageService.upload(
@@ -230,10 +231,7 @@ struct CreateSpaceView: View {
                         toasts.info("Espace créé, mais la couverture n'a pas pu être envoyée. Réessaie depuis les paramètres.")
                     }
                 }
-                let invite = try? await MemberService.createInvite(
-                    spaceId: space.id, userId: uid, role: .member, maxUses: nil, expiresAt: nil
-                )
-                createdCode = invite?.code
+                createdCode = result.inviteCode?.code
                 createdSpace = space
             } catch {
                 toasts.error(FriendlyError.message(error))

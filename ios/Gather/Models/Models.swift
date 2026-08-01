@@ -43,26 +43,17 @@ nonisolated struct SpaceMember: Codable, Identifiable, Hashable, Sendable {
     var id: String { userId }
 }
 
+/// The single permanent invite code of a space (one row per space). Anyone with
+/// the code joins as an observer; regenerating it invalidates the previous one.
 nonisolated struct InviteCode: Codable, Identifiable, Hashable, Sendable {
     let id: String
     var code: String
     var spaceId: String?
-    var role: MemberRole
-    var maxUses: Int?
     var useCount: Int?
-    var expiresAt: String?
     var createdBy: String?
     var createdAt: String?
 
     var uses: Int { useCount ?? 0 }
-    var isExpired: Bool {
-        guard let expiresAt, let d = DateParse.iso(expiresAt) else { return false }
-        return d < Date()
-    }
-    var isExhausted: Bool {
-        guard let maxUses else { return false }
-        return uses >= maxUses
-    }
 }
 
 /// Decodes a value that may arrive as a number or a numeric string (episode duration).

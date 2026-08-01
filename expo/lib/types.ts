@@ -32,14 +32,15 @@ export interface SpaceMember {
   profile?: Profile | null;
 }
 
+/**
+ * The single permanent invite code of a space (one row per space). Anyone with
+ * the code joins as an observer; regenerating it invalidates the previous one.
+ */
 export interface InviteCode {
   id: string;
   code: string;
   space_id: string;
-  role: MemberRole;
-  max_uses: number | null;
   use_count: number;
-  expires_at: string | null;
   created_by: string;
   created_at: string;
 }

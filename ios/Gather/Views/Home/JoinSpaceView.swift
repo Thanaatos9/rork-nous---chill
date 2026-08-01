@@ -28,14 +28,14 @@ struct JoinSpaceView: View {
                             .frame(width: 80, height: 80)
                             .background(Palette.primarySoft, in: Circle())
                         Text("Rejoindre un espace").gType(.title)
-                        Text("Entre le code d'invitation que t'a partagé un membre de l'aventure.")
+                        Text("Entre le code de l'espace que t'a partagé un membre de l'aventure.")
                             .gType(.bodyMuted).multilineTextAlignment(.center).frame(maxWidth: 300)
                     }
                     .padding(.top, Spacing.sm)
 
                     GatherCard(elevated: true) {
                         VStack(spacing: Spacing.lg) {
-                            Field(label: "Code d'invitation") {
+                            Field(label: "Code de l'espace") {
                                 GatherTextField(placeholder: "Ex. K7M2QX9", text: $code,
                                                 autocapitalization: .characters, autocorrection: false,
                                                 tracking: 3, submitLabel: .go, onSubmit: join)

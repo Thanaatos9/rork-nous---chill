@@ -54,14 +54,14 @@ export default function JoinScreen() {
           </View>
           <AppText variant="title" center>Rejoindre un espace</AppText>
           <AppText variant="bodyMuted" center style={{ maxWidth: 300 }}>
-            Entre le code d&apos;invitation que t&apos;a partagé un membre de l&apos;aventure.
+            Entre le code de l&apos;espace que t&apos;a partagé un membre de l&apos;aventure.
           </AppText>
         </View>
       </FadeIn>
 
       <FadeIn delay={120}>
         <Card elevated style={{ gap: spacing.lg }}>
-          <Field label="Code d'invitation">
+          <Field label="Code de l'espace">
             <Input
               placeholder="Ex. K7M2QX9"
               autoCapitalize="characters"

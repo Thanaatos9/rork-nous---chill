@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ensureSpaceInviteCode } from "@/lib/invites";
 import { qk } from "@/lib/keys";
 import { supabase } from "@/lib/supabase";
-import type { Space, SpaceMember, SpaceWithMembership } from "@/lib/types";
+import type { InviteCode, Space, SpaceMember, SpaceWithMembership } from "@/lib/types";
 import { useAuth } from "@/providers/auth";
 
 interface MembershipRow {
@@ -91,11 +92,17 @@ function makeSlug(name: string): string {
   return base ? `${base}-${suffix}` : `espace-${suffix}`;
 }
 
+export interface CreateSpaceResult {
+  space: Space;
+  /** Null only if the code could not be generated — the space itself is fine. */
+  inviteCode: InviteCode | null;
+}
+
 export function useCreateSpace() {
   const { userId } = useAuth();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (input: CreateSpaceInput): Promise<Space> => {
+    mutationFn: async (input: CreateSpaceInput): Promise<CreateSpaceResult> => {
       const { data: space, error } = await supabase
         .from("spaces")
         .insert({
@@ -122,10 +129,21 @@ export function useCreateSpace() {
       if (memberError && !/duplicate|already exists|conflict/i.test(memberError.message)) {
         throw memberError;
       }
-      return space as Space;
+
+      // Every space owns one permanent invite code from birth.
+      let inviteCode: InviteCode | null = null;
+      try {
+        inviteCode = await ensureSpaceInviteCode((space as Space).id, userId as string);
+      } catch (inviteError) {
+        // Nice-to-have: the members screen creates it later if this failed.
+        console.log("[create-space] invite code creation failed:", inviteError);
+      }
+
+      return { space: space as Space, inviteCode };
     },
-    onSuccess: () => {
+    onSuccess: ({ space, inviteCode }) => {
       queryClient.invalidateQueries({ queryKey: qk.spaces });
+      if (inviteCode) queryClient.setQueryData(qk.invite(space.id), inviteCode);
     },
   });
 }
@@ -143,20 +161,14 @@ export function useJoinSpace() {
       const code = rawCode.trim().toUpperCase();
       if (!code) throw new Error("Saisis un code d'invitation.");
 
+      // One code per space: a valid code resolves to exactly one space.
       const { data: invite, error } = await supabase
         .from("invite_codes")
-        .select("*")
+        .select("id, space_id, use_count")
         .eq("code", code)
         .maybeSingle();
       if (error) throw error;
-      if (!invite) throw new Error("Code d'invitation invalide ou expiré.");
-
-      if (invite.expires_at && new Date(invite.expires_at).getTime() < Date.now()) {
-        throw new Error("Ce code d'invitation a expiré.");
-      }
-      if (invite.max_uses != null && (invite.use_count ?? 0) >= invite.max_uses) {
-        throw new Error("Ce code a atteint sa limite d'utilisation.");
-      }
+      if (!invite) throw new Error("Code d'invitation invalide. Vérifie-le auprès du propriétaire de l'espace.");
 
       const { data: existing } = await supabase
         .from("space_members")
@@ -166,15 +178,16 @@ export function useJoinSpace() {
         .maybeSingle();
       if (existing) return { spaceId: invite.space_id as string, alreadyMember: true };
 
+      // Everyone enters as an observer; the owner promotes from the members screen.
       const { error: joinError } = await supabase.from("space_members").insert({
         space_id: invite.space_id,
         user_id: userId,
-        role: invite.role,
+        role: "observer",
         can_create_episodes: false,
       });
       if (joinError) throw joinError;
 
-      // Best-effort usage increment (RLS may restrict this to the owner).
+      // Best-effort usage counter (RLS may restrict this to the owner).
       await supabase
         .from("invite_codes")
         .update({ use_count: (invite.use_count ?? 0) + 1 })
