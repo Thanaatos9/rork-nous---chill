@@ -82,7 +82,9 @@ export function useCreateEpisode() {
           number: nextNumber,
           title: input.title.trim(),
           date: input.date,
-          place: input.place?.trim() || null,
+          // "place" is NOT NULL in the DB even though the UI marks it optional,
+          // so send an empty string rather than null when it is left blank.
+          place: input.place?.trim() || "",
           duration: input.duration ?? null,
           tags: input.tags && input.tags.length > 0 ? input.tags : null,
           cover_url: null,
@@ -106,7 +108,14 @@ export function useCreateEpisode() {
         }
 
         if (uploaded.length > 0) {
-          const rows = uploaded.map((u) => ({ episode_id: episode.id, url: u.url, type: u.type }));
+          const rows = uploaded.map((u) => ({
+            episode_id: episode.id,
+            space_id: input.spaceId,
+            url: u.url,
+            filename: u.url.split("/").pop() || "media",
+            type: u.type,
+            uploaded_by: userId,
+          }));
           const { error: mediaError } = await supabase.from("episode_media").insert(rows);
           if (mediaError) throw mediaError;
         }
@@ -135,10 +144,24 @@ export function useAddEpisodeMedia(episodeId: string, spaceId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (assets: PickedAsset[]): Promise<void> => {
-      const rows: { episode_id: string; url: string; type: string }[] = [];
+      const rows: {
+        episode_id: string;
+        space_id: string;
+        url: string;
+        filename: string;
+        type: string;
+        uploaded_by: string | null;
+      }[] = [];
       for (const asset of assets) {
         const url = await uploadMedia({ kind: "episodes", spaceId, userId, episodeId }, asset);
-        rows.push({ episode_id: episodeId, url, type: asset.type });
+        rows.push({
+          episode_id: episodeId,
+          space_id: spaceId,
+          url,
+          filename: url.split("/").pop() || "media",
+          type: asset.type,
+          uploaded_by: userId,
+        });
       }
       if (rows.length > 0) {
         const { error } = await supabase.from("episode_media").insert(rows);
