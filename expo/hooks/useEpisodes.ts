@@ -62,12 +62,24 @@ export function useCreateEpisode() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (input: CreateEpisodeInput): Promise<Episode> => {
+      // Episodes carry a sequential, per-space number (#1, #2, …) on a NOT NULL
+      // column, so compute the next one from the current highest in this space.
+      const { data: last } = await supabase
+        .from("episodes")
+        .select("number")
+        .eq("space_id", input.spaceId)
+        .order("number", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const nextNumber = ((last?.number as number | null | undefined) ?? 0) + 1;
+
       // The episode is created first so uploads can use its id in candidate
       // storage paths; a failed upload rolls the episode back.
       const { data, error } = await supabase
         .from("episodes")
         .insert({
           space_id: input.spaceId,
+          number: nextNumber,
           title: input.title.trim(),
           date: input.date,
           place: input.place?.trim() || null,
