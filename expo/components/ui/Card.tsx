@@ -80,12 +80,19 @@ export function Divider({ style }: { style?: StyleProp<ViewStyle> }) {
   return <View style={[{ height: 1, backgroundColor: colors.border }, style]} />;
 }
 
+/**
+ * `subtitle` is how the product's series metaphor stays readable: every invented
+ * word (espace, épisode, saison…) gets a plain-language gloss right under it, so
+ * nobody has to have watched the onboarding to know what a section holds.
+ */
 export function SectionHeader({
   title,
+  subtitle,
   action,
   style,
 }: {
   title: string;
+  subtitle?: string;
   action?: React.ReactNode;
   style?: StyleProp<ViewStyle>;
 }) {
@@ -96,7 +103,10 @@ export function SectionHeader({
         style,
       ]}
     >
-      <AppText variant="overline">{title}</AppText>
+      <View style={{ flex: 1, gap: 2 }}>
+        <AppText variant="overline">{title}</AppText>
+        {subtitle ? <AppText variant="caption">{subtitle}</AppText> : null}
+      </View>
       {action}
     </View>
   );

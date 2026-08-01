@@ -152,7 +152,10 @@ export default function CreateSpaceScreen() {
   return (
     <Screen scroll contentStyle={{ paddingHorizontal: spacing.lg }}>
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingTop: spacing.sm, marginBottom: spacing.lg }}>
-        <AppText variant="title">Nouvel espace</AppText>
+        <View style={{ flex: 1, gap: 2 }}>
+          <AppText variant="title">Nouvel espace</AppText>
+          <AppText variant="caption">Le groupe qui partagera ses moments</AppText>
+        </View>
         <IconButton icon={<X size={20} color={colors.text} />} onPress={() => router.back()} size={40} />
       </View>
 

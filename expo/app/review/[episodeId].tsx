@@ -74,9 +74,11 @@ export default function ReviewScreen() {
   return (
     <Screen scroll contentStyle={{ paddingHorizontal: spacing.lg }}>
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingTop: spacing.sm, marginBottom: spacing.lg }}>
-        <View>
+        <View style={{ flex: 1, gap: 2 }}>
           <AppText variant="title">Ma review</AppText>
-          {episode ? <AppText variant="caption" numberOfLines={1}>{episode.title}</AppText> : null}
+          <AppText variant="caption" numberOfLines={1}>
+            {episode ? `Tes impressions sur « ${episode.title} »` : "Tes impressions, en privé"}
+          </AppText>
         </View>
         <IconButton icon={<X size={20} color={colors.text} />} onPress={() => router.back()} size={40} />
       </View>
@@ -85,7 +87,8 @@ export default function ReviewScreen() {
         <Card glow style={{ flexDirection: "row", gap: 10, alignItems: "center", marginBottom: spacing.xl }}>
           <Lock size={16} color={colors.accent} />
           <AppText variant="caption" style={{ flex: 1, color: colors.textMuted }}>
-            Privée jusqu&apos;au déverrouillage. Toi seul(e) la vois pour l&apos;instant.
+            Personne ne verra ce que tu écris avant la fin de la saison — ni les autres membres, ni le
+            propriétaire. Tout se révèle d&apos;un coup, en même temps.
           </AppText>
         </Card>
       </FadeIn>

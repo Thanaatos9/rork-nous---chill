@@ -32,7 +32,12 @@ export default function JoinScreen() {
     try {
       const result = await joinSpace.mutateAsync(code);
       await clearPendingInvite();
-      toast.success(result.alreadyMember ? "Tu fais déjà partie de cet espace." : "Bienvenue dans l'espace !");
+      // Sets expectations before the space dashboard explains the role in full.
+      toast.success(
+        result.alreadyMember
+          ? "Tu fais déjà partie de cet espace."
+          : "Bienvenue ! Tu es observateur pour l'instant."
+      );
       router.replace({ pathname: "/space/[id]", params: { id: result.spaceId } });
     } catch (error) {
       toast.error(friendlyError(error));

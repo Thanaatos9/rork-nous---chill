@@ -1,6 +1,6 @@
 import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { Camera, Clock, Images, MapPin, Plus, Tag, Video, X } from "lucide-react-native";
+import { Camera, Clock, Eye, Images, MapPin, Plus, Tag, Video, X } from "lucide-react-native";
 import { useState } from "react";
 import { ScrollView, TouchableOpacity, View } from "react-native";
 import { IconButton } from "@/components/ui/Button";
@@ -94,8 +94,15 @@ export default function CreateEpisodeScreen() {
           <IconButton icon={<X size={20} color={colors.text} />} onPress={() => router.back()} size={40} />
         </View>
         <View style={{ alignItems: "center", gap: spacing.md, marginTop: spacing.xxxl, paddingHorizontal: spacing.lg }}>
-          <AppText variant="h2" center>Lecture seule</AppText>
-          <AppText variant="bodyMuted" center>Le propriétaire doit te promouvoir pour créer des épisodes.</AppText>
+          <View style={{ width: 72, height: 72, borderRadius: 36, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" }}>
+            <Eye size={30} color={colors.textMuted} />
+          </View>
+          <AppText variant="h2" center>Tu es observateur</AppText>
+          <AppText variant="bodyMuted" center style={{ maxWidth: 300 }}>
+            Tu peux voir, aimer et commenter tout l&apos;espace. Pour ajouter des épisodes et écrire tes
+            impressions, le propriétaire doit t&apos;autoriser à participer depuis l&apos;onglet Membres.
+          </AppText>
+          <Button title="J'ai compris" variant="secondary" onPress={() => router.back()} style={{ marginTop: spacing.sm }} />
         </View>
       </Screen>
     );
@@ -104,7 +111,10 @@ export default function CreateEpisodeScreen() {
   return (
     <Screen scroll contentStyle={{ paddingHorizontal: spacing.lg }}>
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingTop: spacing.sm, marginBottom: spacing.lg }}>
-        <AppText variant="title">Nouvel épisode</AppText>
+        <View style={{ flex: 1, gap: 2 }}>
+          <AppText variant="title">Nouvel épisode</AppText>
+          <AppText variant="caption">Un moment que vous avez vécu ensemble</AppText>
+        </View>
         <IconButton icon={<X size={20} color={colors.text} />} onPress={() => router.back()} size={40} />
       </View>
 

@@ -20,40 +20,44 @@ interface Slide {
   icon: "brand" | "space" | "invite" | "episode" | "ideas";
 }
 
+// The overlines used to read "Épisode 1…4", which collided head-on with
+// "épisode" as the product's core object — the tutorial explained the metaphor
+// using the metaphor. They are plain step counters now, and each slide defines
+// its invented word in ordinary language before using it.
 const SLIDES: Slide[] = [
   {
     key: "welcome",
     overline: "Bienvenue",
     title: "Bienvenue sur Gather",
-    body: "Ici, vos moments partagés deviennent une série : des espaces, des épisodes, des souvenirs à revoir quand tu veux.",
+    body: "Vos moments partagés deviennent une série à revivre. Trois mots à retenir : un espace (votre groupe), un épisode (un moment vécu), une saison (la période que vous traversez ensemble).",
     icon: "brand",
   },
   {
     key: "space",
-    overline: "Épisode 1",
+    overline: "Étape 1 sur 4",
     title: "Crée ton espace",
-    body: "Un espace, c'est une aventure partagée — ton couple, ta bande d'amis ou ta famille. Chacune a sa propre couverture, comme une affiche de série.",
+    body: "Un espace, c'est tout simplement ton groupe : ton couple, ta bande d'amis ou ta famille. Il a sa propre couverture, comme une affiche de série.",
     icon: "space",
   },
   {
     key: "invite",
-    overline: "Épisode 2",
+    overline: "Étape 2 sur 4",
     title: "Invite tes proches",
-    body: "Un seul code par espace : partage-le et retrouvez-vous au même endroit. Tout le monde fait partie du casting.",
+    body: "Un seul code par espace : partage-le et retrouvez-vous au même endroit. Chaque personne qui arrive commence en observateur — elle voit tout, et le propriétaire l'autorise ensuite à participer.",
     icon: "invite",
   },
   {
     key: "episode",
-    overline: "Épisode 3",
-    title: "Capture tes épisodes",
+    overline: "Étape 3 sur 4",
+    title: "Ajoutez vos moments",
     body: "Chaque sortie, dîner ou voyage devient un épisode : photos, vidéos et petites notes pour ne rien oublier.",
     icon: "episode",
   },
   {
     key: "ideas",
-    overline: "Épisode 4",
-    title: "Idées et bilan de saison",
-    body: "Propose des idées pour vos prochains épisodes, note vos souvenirs en étoiles et revivez votre bilan de saison.",
+    overline: "Étape 4 sur 4",
+    title: "Idées et révélation",
+    body: "Proposez vos prochaines sorties et votez. Vos impressions sur chaque moment restent privées jusqu'à la fin de la saison — puis tout se révèle d'un coup.",
     icon: "ideas",
   },
 ];

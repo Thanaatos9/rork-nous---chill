@@ -10,7 +10,7 @@ import { Card, Divider, Screen, SectionHeader } from "@/components/ui/Card";
 import { Loader } from "@/components/ui/Feedback";
 import { FadeIn } from "@/components/ui/motion";
 import { AppText } from "@/components/ui/Text";
-import { colors, spacing } from "@/constants/theme";
+import { colors, radius, spacing } from "@/constants/theme";
 import { friendlyError } from "@/lib/errors";
 import { canParticipate, effectiveRole, isOwner } from "@/lib/types";
 import { useMembers, useRegenerateInviteCode, useRemoveMember, useSpaceInviteCode, useUpdateMember } from "@/hooks/useMembers";
@@ -97,10 +97,31 @@ export default function MembersScreen() {
                   {owner && !memberIsOwner ? (
                     <>
                       <Divider />
-                      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                      {/* Phrased as an authorisation the owner grants, not as an
+                          opaque capability flag: the "off" state is the one that
+                          needs explaining, so it says what the person is missing. */}
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: spacing.md,
+                          backgroundColor: participating ? "transparent" : colors.primarySoft,
+                          borderRadius: radius.md,
+                          marginHorizontal: participating ? 0 : -spacing.sm,
+                          paddingHorizontal: participating ? 0 : spacing.sm,
+                          paddingVertical: participating ? 0 : spacing.sm,
+                        }}
+                      >
                         <View style={{ flex: 1 }}>
-                          <AppText style={{ fontWeight: "600", fontSize: 14, color: colors.text }}>Peut participer</AppText>
-                          <AppText variant="caption">Créer des épisodes, écrire des reviews</AppText>
+                          <AppText style={{ fontWeight: "600", fontSize: 14, color: colors.text }}>
+                            {participating ? "Peut participer" : "Autoriser à participer"}
+                          </AppText>
+                          <AppText variant="caption">
+                            {participating
+                              ? "Crée des épisodes et écrit ses impressions"
+                              : `Pour l'instant, ${member.profile?.name ?? "cette personne"} peut seulement voir et commenter`}
+                          </AppText>
                         </View>
                         <Switch
                           value={participating}
@@ -108,6 +129,7 @@ export default function MembersScreen() {
                           trackColor={{ false: colors.surface, true: colors.primary }}
                           thumbColor="#fff"
                           ios_backgroundColor={colors.surface}
+                          accessibilityLabel={`Autoriser ${member.profile?.name ?? "ce membre"} à participer`}
                         />
                       </View>
                     </>

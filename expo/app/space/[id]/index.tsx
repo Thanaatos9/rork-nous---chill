@@ -6,6 +6,7 @@ import React from "react";
 import { RefreshControl, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { EpisodePoster } from "@/components/EpisodeCard";
+import { ObserverNotice, PendingObserversNotice } from "@/components/ObserverNotice";
 import { AvatarStack } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { Button, IconButton } from "@/components/ui/Button";
@@ -15,7 +16,7 @@ import { FadeIn, PressableScale, Pulse } from "@/components/ui/motion";
 import { AppText } from "@/components/ui/Text";
 import { colors, radius, shadows, spacing } from "@/constants/theme";
 import { formatDate, getSeasonStatus } from "@/lib/format";
-import { canParticipate, isOwner } from "@/lib/types";
+import { canParticipate, effectiveRole, isOwner } from "@/lib/types";
 import { useEpisodes } from "@/hooks/useEpisodes";
 import { useMembers } from "@/hooks/useMembers";
 import { useIdeas } from "@/hooks/useSocial";
@@ -53,6 +54,14 @@ export default function SpaceDashboard() {
   const owner = isOwner(space.membership);
   const participate = canParticipate(space.membership);
   const featured = (episodes ?? []).slice(0, 8);
+
+  // Role limbo, surfaced on both sides: the newcomer learns why things are
+  // greyed out, the owner learns someone is waiting on them.
+  const isObserver = effectiveRole(space.membership) === "observer";
+  const ownerName = (members ?? []).find((m) => m.role === "owner")?.profile?.name ?? null;
+  const pendingObservers = owner
+    ? (members ?? []).filter((m) => m.role !== "owner" && effectiveRole(m) === "observer").length
+    : 0;
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -95,6 +104,23 @@ export default function SpaceDashboard() {
         </View>
 
         <View style={{ paddingHorizontal: spacing.lg, gap: spacing.xxl, marginTop: spacing.lg }}>
+          {/* Role limbo — highest position on purpose: it explains why the rest
+              of the screen is partly out of reach. */}
+          {isObserver ? (
+            <FadeIn>
+              <ObserverNotice spaceName={space.name} ownerName={ownerName} />
+            </FadeIn>
+          ) : null}
+
+          {pendingObservers > 0 ? (
+            <FadeIn>
+              <PendingObserversNotice
+                count={pendingObservers}
+                onManage={() => router.push({ pathname: "/space/[id]/members", params: { id } })}
+              />
+            </FadeIn>
+          ) : null}
+
           {/* Season card */}
           <FadeIn>
             <Card elevated style={{ gap: spacing.md }}>

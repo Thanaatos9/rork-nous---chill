@@ -81,12 +81,12 @@ export default function HomeScreen() {
 
       <FadeIn>
         <View style={{ flexDirection: "row", gap: spacing.md, marginBottom: spacing.xxl }}>
-          <Button title="Créer" icon={<Plus size={18} color={colors.primaryFg} />} onPress={() => router.push("/create-space")} style={{ flex: 1 }} />
-          <Button title="Rejoindre" variant="secondary" icon={<Ticket size={18} color={colors.text} />} onPress={() => router.push("/join")} style={{ flex: 1 }} />
+          <Button title="Créer un espace" icon={<Plus size={18} color={colors.primaryFg} />} onPress={() => router.push("/create-space")} style={{ flex: 1 }} />
+          <Button title="J'ai un code" variant="secondary" icon={<Ticket size={18} color={colors.text} />} onPress={() => router.push("/join")} style={{ flex: 1 }} />
         </View>
       </FadeIn>
 
-      <SectionHeader title="Tes espaces" />
+      <SectionHeader title="Tes espaces" subtitle="Tes groupes : couple, amis, famille" />
 
       {isLoading ? (
         <Loader label="Chargement de tes aventures…" />

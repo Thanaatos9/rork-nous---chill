@@ -23,9 +23,12 @@ const darkColors = {
   borderStrong: "#3D3D42",
 
   // Text
+  // `caption` (12px) and `overline` (11px) render in textFaint, so it carries
+  // real information (dates, counts, section labels) and must clear WCAG AA.
+  // The former #67676E measured 3.3:1 on bg and 3.0:1 on card — both failing.
   text: "#F7F7F7",
   textMuted: "#9B9BA2",
-  textFaint: "#67676E",
+  textFaint: "#8A8A92",
 
   // Brand
   primary: "#EF233C",
@@ -69,9 +72,11 @@ const lightColors: Palette = {
   borderStrong: "#CFCFD7",
 
   // Text
+  // Light mode was the worse offender: textFaint measured 2.5:1 on bg. Muted is
+  // darkened alongside it so the muted → faint hierarchy survives the fix.
   text: "#1B1B1F",
-  textMuted: "#6E6E77",
-  textFaint: "#9B9BA3",
+  textMuted: "#5A5A64",
+  textFaint: "#6C6C76",
 
   // Brand
   primary: "#E11D33",
