@@ -10,10 +10,14 @@ import { colors, radius, shadows, spacing } from "@/constants/theme";
 import { formatDateShort, normalizeTags } from "@/lib/format";
 import type { Episode } from "@/lib/types";
 
+/**
+ * The cover is set once, at creation, and nothing changes it afterwards —
+ * photos dropped into an episode later belong to its album, not to its poster.
+ * An episode without a cover keeps the placeholder rather than borrowing the
+ * newest image.
+ */
 export function getEpisodeCover(episode: Episode): string | null {
-  if (episode.cover_url) return episode.cover_url;
-  const firstImage = (episode.media ?? []).find((m) => m.type !== "video");
-  return firstImage?.url ?? (episode.media ?? [])[0]?.url ?? null;
+  return episode.cover_url ?? null;
 }
 
 function MediaCountBadge({ episode }: { episode: Episode }) {

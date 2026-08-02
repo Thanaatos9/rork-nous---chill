@@ -66,6 +66,52 @@ function FullscreenViewer({ media, initialIndex, onClose }: { media: EpisodeMedi
   );
 }
 
+/**
+ * The album: every photo and video of an episode, as tappable thumbnails.
+ *
+ * Deliberately separate from the hero above, which only ever shows the cover:
+ * dropping a photo into an episode months later should fill the album, not
+ * rewrite the poster at the top of the screen.
+ */
+export function MediaGrid({ media, emptyLabel }: { media: EpisodeMedia[]; emptyLabel?: string }) {
+  const [viewer, setViewer] = useState<number | null>(null);
+  // Measured rather than derived from the window, so the tiles stay square
+  // whatever padding the parent screen uses.
+  const [width, setWidth] = useState<number>(0);
+  const gap = 6;
+  const tile = width > 0 ? (width - gap * 2) / 3 : 0;
+
+  if (!media || media.length === 0) {
+    return emptyLabel ? <AppText variant="bodyMuted">{emptyLabel}</AppText> : null;
+  }
+
+  return (
+    <View onLayout={(e) => setWidth(e.nativeEvent.layout.width)} style={{ flexDirection: "row", flexWrap: "wrap", gap }}>
+      {tile > 0
+        ? media.map((m, i) => (
+            <Pressable
+              key={m.id}
+              onPress={() => setViewer(i)}
+              accessibilityRole="imagebutton"
+              accessibilityLabel={m.type === "video" ? "Voir la vidéo" : "Voir la photo"}
+              style={{ width: tile, height: tile, borderRadius: radius.md, overflow: "hidden", backgroundColor: colors.surface }}
+            >
+              {m.type === "video" ? (
+                <View style={{ flex: 1, backgroundColor: "#0A0A0B", alignItems: "center", justifyContent: "center" }}>
+                  <Play size={22} color="#fff" fill="#fff" style={{ marginLeft: 2 }} />
+                </View>
+              ) : (
+                <Image source={{ uri: m.url }} style={{ width: "100%", height: "100%" }} contentFit="cover" transition={150} />
+              )}
+            </Pressable>
+          ))
+        : null}
+
+      {viewer !== null ? <FullscreenViewer media={media} initialIndex={viewer} onClose={() => setViewer(null)} /> : null}
+    </View>
+  );
+}
+
 export function MediaGallery({ media, height = 360, emoji = "🎬" }: { media: EpisodeMedia[]; height?: number; emoji?: string }) {
   const [index, setIndex] = useState<number>(0);
   const [viewer, setViewer] = useState<number | null>(null);

@@ -18,7 +18,7 @@ import {
 import React, { useMemo, useState } from "react";
 import { ScrollView, TextInput, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { MediaGallery } from "@/components/MediaGallery";
+import { MediaGallery, MediaGrid } from "@/components/MediaGallery";
 import { RatingStars } from "@/components/RatingStars";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
@@ -32,7 +32,7 @@ import { colors, radius, spacing } from "@/constants/theme";
 import { friendlyError } from "@/lib/errors";
 import { formatDate, formatDuration, formatRelative, normalizeTags } from "@/lib/format";
 import { pickFromLibrary } from "@/lib/media";
-import { canParticipate, effectiveRole, type EpisodeComment, type Review, type SpaceMember } from "@/lib/types";
+import { canParticipate, effectiveRole, type EpisodeComment, type EpisodeMedia, type Review, type SpaceMember } from "@/lib/types";
 import { useAddEpisodeMedia, useEpisode, useEpisodeLikes, useToggleLike } from "@/hooks/useEpisodes";
 import { useMembers } from "@/hooks/useMembers";
 import { useEpisodeReviews, useMyReview } from "@/hooks/useReviews";
@@ -193,7 +193,22 @@ export default function EpisodeDetailScreen() {
   }
 
   const tags = normalizeTags(episode.tags);
-  const mediaCount = episode.media?.length ?? 0;
+  const media = episode.media ?? [];
+  const mediaCount = media.length;
+
+  // The cover is the episode's poster and stays what it was at creation:
+  // media added later fills the album below, it never rewrites the top of the
+  // screen. `cover_url` may point at a row that is not loaded (or no longer
+  // exists), so fall back to a stand-in item rather than dropping the image.
+  const coverItem: EpisodeMedia | null = episode.cover_url
+    ? media.find((m) => m.url === episode.cover_url) ?? {
+        id: "cover",
+        episode_id: episode.id,
+        url: episode.cover_url,
+        type: "image",
+        created_at: episode.created_at,
+      }
+    : null;
 
   const onAddMedia = async () => {
     try {
@@ -226,7 +241,7 @@ export default function EpisodeDetailScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: spacing.xxxl }} automaticallyAdjustKeyboardInsets>
         {/* Hero gallery */}
         <View>
-          <MediaGallery media={episode.media ?? []} height={380} />
+          <MediaGallery media={coverItem ? [coverItem] : []} height={380} />
           <View style={{ position: "absolute", top: insets.top + 6, left: spacing.lg }}>
             <IconButton icon={<ChevronLeft size={22} color="#fff" />} onPress={() => router.back()} size={42} style={{ backgroundColor: "rgba(0,0,0,0.45)" }} accessibilityLabel="Retour" />
           </View>
@@ -261,20 +276,6 @@ export default function EpisodeDetailScreen() {
               ) : null}
             </View>
           </FadeIn>
-
-          {/* Media. The add control used to be a translucent icon sitting on top
-              of the hero photo, where nobody ever found it — it is a named
-              button in the page flow now. */}
-          {participate ? (
-            <Button
-              title={mediaCount > 0 ? "Ajouter des photos ou vidéos" : "Ajouter les premières photos"}
-              variant="secondary"
-              icon={<ImagePlus size={18} color={colors.text} />}
-              onPress={onAddMedia}
-              loading={addMedia.isPending}
-              fullWidth
-            />
-          ) : null}
 
           {/* Like / comment counts */}
           <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.xl }}>
@@ -385,6 +386,29 @@ export default function EpisodeDetailScreen() {
                 ) : null}
               </>
             )}
+          </View>
+
+          <Divider />
+
+          {/* Album — everything shot that day, cover included. Sits under the
+              reviews so the top of the screen stays the poster. */}
+          <View style={{ gap: spacing.md }}>
+            <SectionHeader
+              title={`Photos & vidéos${mediaCount > 0 ? ` · ${mediaCount}` : ""}`}
+              subtitle="La couverture, elle, ne bouge plus"
+            />
+            <MediaGrid media={media} emptyLabel="Aucune photo ni vidéo pour l'instant." />
+            {participate ? (
+              <Button
+                title={mediaCount > 0 ? "Ajouter des photos ou vidéos" : "Ajouter les premières photos"}
+                variant="secondary"
+                icon={<ImagePlus size={18} color={colors.text} />}
+                onPress={onAddMedia}
+                loading={addMedia.isPending}
+                fullWidth
+                style={{ marginTop: spacing.xs }}
+              />
+            ) : null}
           </View>
 
           <Divider />
