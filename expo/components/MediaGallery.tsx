@@ -73,7 +73,16 @@ function FullscreenViewer({ media, initialIndex, onClose }: { media: EpisodeMedi
  * dropping a photo into an episode months later should fill the album, not
  * rewrite the poster at the top of the screen.
  */
-export function MediaGrid({ media, emptyLabel }: { media: EpisodeMedia[]; emptyLabel?: string }) {
+export function MediaGrid({
+  media,
+  emptyLabel,
+  onDelete,
+}: {
+  media: EpisodeMedia[];
+  emptyLabel?: string;
+  /** Passed only when the viewer may remove media — shows a ✕ on each tile. */
+  onDelete?: (item: EpisodeMedia) => void;
+}) {
   const [viewer, setViewer] = useState<number | null>(null);
   // Measured rather than derived from the window, so the tiles stay square
   // whatever padding the parent screen uses.
@@ -103,6 +112,18 @@ export function MediaGrid({ media, emptyLabel }: { media: EpisodeMedia[]; emptyL
               ) : (
                 <Image source={{ uri: m.url }} style={{ width: "100%", height: "100%" }} contentFit="cover" transition={150} />
               )}
+
+              {onDelete ? (
+                <Pressable
+                  onPress={() => onDelete(m)}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={m.type === "video" ? "Supprimer la vidéo" : "Supprimer la photo"}
+                  style={{ position: "absolute", top: 4, right: 4, backgroundColor: "rgba(0,0,0,0.65)", borderRadius: radius.pill, padding: 4 }}
+                >
+                  <X size={13} color="#fff" />
+                </Pressable>
+              ) : null}
             </Pressable>
           ))
         : null}

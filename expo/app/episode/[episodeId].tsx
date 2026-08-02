@@ -17,7 +17,7 @@ import {
   Trash2,
 } from "lucide-react-native";
 import React, { useMemo, useState } from "react";
-import { ScrollView, TextInput, TouchableOpacity, View } from "react-native";
+import { Alert, ScrollView, TextInput, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CoverAdjustModal } from "@/components/CoverAdjustModal";
 import { MediaGallery, MediaGrid } from "@/components/MediaGallery";
@@ -34,8 +34,16 @@ import { colors, radius, spacing } from "@/constants/theme";
 import { friendlyError } from "@/lib/errors";
 import { formatDate, formatDuration, formatRelative, normalizeTags } from "@/lib/format";
 import { pickCoverImage, pickFromLibrary, type PickedAsset } from "@/lib/media";
-import { canParticipate, effectiveRole, type EpisodeComment, type EpisodeMedia, type Review, type SpaceMember } from "@/lib/types";
-import { useAddEpisodeMedia, useEpisode, useEpisodeLikes, useSetEpisodeCover, useToggleLike } from "@/hooks/useEpisodes";
+import { canParticipate, effectiveRole, isOwner, type EpisodeComment, type EpisodeMedia, type Review, type SpaceMember } from "@/lib/types";
+import {
+  useAddEpisodeMedia,
+  useDeleteEpisode,
+  useDeleteEpisodeMedia,
+  useEpisode,
+  useEpisodeLikes,
+  useSetEpisodeCover,
+  useToggleLike,
+} from "@/hooks/useEpisodes";
 import { useMembers } from "@/hooks/useMembers";
 import { useEpisodeReviews, useMyReview } from "@/hooks/useReviews";
 import { useAddComment, useComments, useDeleteComment, useToggleReaction } from "@/hooks/useSocial";
@@ -172,6 +180,8 @@ export default function EpisodeDetailScreen() {
   const addMedia = useAddEpisodeMedia(episodeId, spaceId);
 
   const setCover = useSetEpisodeCover(episodeId, spaceId);
+  const deleteMedia = useDeleteEpisodeMedia(episodeId, spaceId);
+  const deleteEpisode = useDeleteEpisode(spaceId);
 
   const [pendingCover, setPendingCover] = useState<PickedAsset | null>(null);
   const [draft, setDraft] = useState<string>("");
@@ -181,6 +191,9 @@ export default function EpisodeDetailScreen() {
 
   const participate = canParticipate(space?.membership);
   const isObserver = effectiveRole(space?.membership) === "observer";
+  // Destructive actions stay with the space owner and the person who wrote the
+  // episode — not with every participant.
+  const canManage = isOwner(space?.membership) || (!!userId && episode?.created_by === userId);
   const unlocked = !!space?.season_unlocked;
 
   const answeredIds = useMemo(() => new Set((reviews ?? []).map((r) => r.author_id)), [reviews]);
@@ -251,6 +264,51 @@ export default function EpisodeDetailScreen() {
     } catch (e) {
       toast.error(friendlyError(e));
     }
+  };
+
+  const confirmDeleteMedia = (item: EpisodeMedia) => {
+    Alert.alert(
+      item.type === "video" ? "Supprimer cette vidéo ?" : "Supprimer cette photo ?",
+      "Elle disparaîtra de la galerie pour tout le monde. Cette action est irréversible.",
+      [
+        { text: "Annuler", style: "cancel" },
+        {
+          text: "Supprimer",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteMedia.mutateAsync(item.id);
+              toast.success("Média supprimé");
+            } catch (e) {
+              toast.error(friendlyError(e));
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const confirmDeleteEpisode = () => {
+    Alert.alert(
+      "Supprimer cet épisode ?",
+      `« ${episode.title} », ses photos, ses commentaires et les reviews associées seront définitivement supprimés.`,
+      [
+        { text: "Annuler", style: "cancel" },
+        {
+          text: "Supprimer",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteEpisode.mutateAsync(episodeId);
+              toast.success("Épisode supprimé");
+              router.back();
+            } catch (e) {
+              toast.error(friendlyError(e));
+            }
+          },
+        },
+      ],
+    );
   };
 
   const onSendComment = async () => {
@@ -433,7 +491,11 @@ export default function EpisodeDetailScreen() {
               title={`Photos & vidéos${mediaCount > 0 ? ` · ${mediaCount}` : ""}`}
               subtitle="La couverture, elle, ne bouge plus"
             />
-            <MediaGrid media={media} emptyLabel="Aucune photo ni vidéo pour l'instant." />
+            <MediaGrid
+              media={media}
+              emptyLabel="Aucune photo ni vidéo pour l'instant."
+              onDelete={canManage ? confirmDeleteMedia : undefined}
+            />
             {participate ? (
               <Button
                 title={mediaCount > 0 ? "Ajouter des photos ou vidéos" : "Ajouter les premières photos"}
@@ -492,6 +554,20 @@ export default function EpisodeDetailScreen() {
               </View>
             ) : null}
           </View>
+
+          {canManage ? (
+            <>
+              <Divider />
+              <Button
+                title="Supprimer l'épisode"
+                variant="destructive"
+                icon={<Trash2 size={17} color="#fff" />}
+                onPress={confirmDeleteEpisode}
+                loading={deleteEpisode.isPending}
+                fullWidth
+              />
+            </>
+          ) : null}
         </View>
       </ScrollView>
 

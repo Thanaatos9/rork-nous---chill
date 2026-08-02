@@ -241,6 +241,56 @@ export function useAddEpisodeMedia(episodeId: string, spaceId: string) {
   });
 }
 
+/**
+ * Removes one photo or video from an episode's album.
+ *
+ * The row is deleted with `.select()` on purpose: under RLS, a delete the
+ * policies refuse comes back as a success with zero rows, so without it the app
+ * would cheerfully report "supprimé" and change nothing.
+ */
+export function useDeleteEpisodeMedia(episodeId: string, spaceId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (mediaId: string): Promise<void> => {
+      const { data, error } = await supabase.from("episode_media").delete().eq("id", mediaId).select("id");
+      if (error) throw error;
+      if (!data || data.length === 0) {
+        throw new Error("Le serveur a refusé la suppression. Tu n'as peut-être pas les droits sur ce média.");
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: qk.episode(episodeId) });
+      queryClient.invalidateQueries({ queryKey: qk.episodes(spaceId) });
+    },
+  });
+}
+
+/** Deletes an episode and everything hanging off it. */
+export function useDeleteEpisode(spaceId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (episodeId: string): Promise<void> => {
+      // Children are cleared first so the delete works whether or not the
+      // foreign keys were declared ON DELETE CASCADE. Failures are ignored:
+      // when the cascade does exist, these calls are simply redundant.
+      for (const table of ["episode_media", "episode_comments", "episode_likes", "reviews"]) {
+        const { error } = await supabase.from(table).delete().eq("episode_id", episodeId);
+        if (error) console.log(`[episodes] could not clear ${table}:`, error.message);
+      }
+
+      const { data, error } = await supabase.from("episodes").delete().eq("id", episodeId).select("id");
+      if (error) throw error;
+      if (!data || data.length === 0) {
+        throw new Error("Le serveur a refusé la suppression. Seuls le propriétaire de l'espace et l'auteur de l'épisode peuvent le supprimer.");
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: qk.episodes(spaceId) });
+      queryClient.invalidateQueries({ queryKey: qk.synthese(spaceId) });
+    },
+  });
+}
+
 export function useEpisodeLikes(episodeId: string) {
   const { userId } = useAuth();
   return useQuery({
