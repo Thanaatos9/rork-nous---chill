@@ -1,5 +1,6 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
+  Camera,
   CheckCircle2,
   ChevronLeft,
   Clock,
@@ -18,6 +19,7 @@ import {
 import React, { useMemo, useState } from "react";
 import { ScrollView, TextInput, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { CoverAdjustModal } from "@/components/CoverAdjustModal";
 import { MediaGallery, MediaGrid } from "@/components/MediaGallery";
 import { RatingStars } from "@/components/RatingStars";
 import { Avatar } from "@/components/ui/Avatar";
@@ -31,9 +33,9 @@ import { AppText } from "@/components/ui/Text";
 import { colors, radius, spacing } from "@/constants/theme";
 import { friendlyError } from "@/lib/errors";
 import { formatDate, formatDuration, formatRelative, normalizeTags } from "@/lib/format";
-import { pickFromLibrary } from "@/lib/media";
+import { pickCoverImage, pickFromLibrary, type PickedAsset } from "@/lib/media";
 import { canParticipate, effectiveRole, type EpisodeComment, type EpisodeMedia, type Review, type SpaceMember } from "@/lib/types";
-import { useAddEpisodeMedia, useEpisode, useEpisodeLikes, useToggleLike } from "@/hooks/useEpisodes";
+import { useAddEpisodeMedia, useEpisode, useEpisodeLikes, useSetEpisodeCover, useToggleLike } from "@/hooks/useEpisodes";
 import { useMembers } from "@/hooks/useMembers";
 import { useEpisodeReviews, useMyReview } from "@/hooks/useReviews";
 import { useAddComment, useComments, useDeleteComment, useToggleReaction } from "@/hooks/useSocial";
@@ -169,6 +171,9 @@ export default function EpisodeDetailScreen() {
   const toggleReaction = useToggleReaction(episodeId);
   const addMedia = useAddEpisodeMedia(episodeId, spaceId);
 
+  const setCover = useSetEpisodeCover(episodeId, spaceId);
+
+  const [pendingCover, setPendingCover] = useState<PickedAsset | null>(null);
   const [draft, setDraft] = useState<string>("");
   // The composer sits in the page scroll, so it can grow with the comment
   // rather than trapping a long one behind an inner scrollbar.
@@ -210,6 +215,28 @@ export default function EpisodeDetailScreen() {
       }
     : null;
 
+  // Two distinct actions on purpose: this one replaces the poster at the top of
+  // the screen, the album button below feeds the gallery. Neither touches the
+  // other.
+  const onPickCover = async () => {
+    try {
+      const asset = await pickCoverImage();
+      if (asset) setPendingCover(asset);
+    } catch (e) {
+      toast.error(friendlyError(e));
+    }
+  };
+
+  const onCoverAdjusted = async (cropped: PickedAsset) => {
+    setPendingCover(null);
+    try {
+      await setCover.mutateAsync(cropped);
+      toast.success("Couverture mise à jour");
+    } catch (e) {
+      toast.error(friendlyError(e));
+    }
+  };
+
   const onAddMedia = async () => {
     try {
       const picked = await pickFromLibrary(true);
@@ -242,8 +269,17 @@ export default function EpisodeDetailScreen() {
         {/* Hero gallery */}
         <View>
           <MediaGallery media={coverItem ? [coverItem] : []} height={380} />
-          <View style={{ position: "absolute", top: insets.top + 6, left: spacing.lg }}>
+          <View style={{ position: "absolute", top: insets.top + 6, left: spacing.lg, right: spacing.lg, flexDirection: "row", justifyContent: "space-between" }}>
             <IconButton icon={<ChevronLeft size={22} color="#fff" />} onPress={() => router.back()} size={42} style={{ backgroundColor: "rgba(0,0,0,0.45)" }} accessibilityLabel="Retour" />
+            {participate ? (
+              <IconButton
+                icon={<Camera size={20} color="#fff" />}
+                onPress={onPickCover}
+                size={42}
+                style={{ backgroundColor: "rgba(0,0,0,0.45)" }}
+                accessibilityLabel={coverItem ? "Changer la photo de couverture" : "Ajouter une photo de couverture"}
+              />
+            ) : null}
           </View>
         </View>
 
@@ -458,6 +494,12 @@ export default function EpisodeDetailScreen() {
           </View>
         </View>
       </ScrollView>
+
+      <CoverAdjustModal
+        asset={pendingCover}
+        onCancel={() => setPendingCover(null)}
+        onDone={onCoverAdjusted}
+      />
     </View>
   );
 }

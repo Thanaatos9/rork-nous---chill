@@ -54,13 +54,18 @@ export interface CreateEpisodeInput {
   place?: string;
   duration?: number | null;
   tags?: string[];
+  /** The poster. Chosen deliberately, and kept out of the album. */
+  cover?: PickedAsset | null;
+  /** The album: everything shot that day. */
   assets: PickedAsset[];
 }
 
 export interface CreatedEpisode {
   episode: Episode;
-  /** Media that could not be sent. The episode is kept either way. */
+  /** Album media that could not be sent. The episode is kept either way. */
   failedMedia: number;
+  /** True when a cover was chosen but could not be sent. */
+  coverFailed: boolean;
 }
 
 export function useCreateEpisode() {
@@ -105,9 +110,30 @@ export function useCreateEpisode() {
       // photo failed to upload throws away everything the user typed — they can
       // always add the missing media afterwards, so keep the episode and report
       // what did not make it.
+
+      // The cover is uploaded on its own and never lands in `episode_media`:
+      // it is the episode's poster, not the first item of its album.
+      let coverFailed = false;
+      if (input.cover) {
+        try {
+          const coverUrl = await uploadMedia(
+            { kind: "covers", spaceId: input.spaceId, userId, episodeId: episode.id },
+            input.cover,
+          );
+          const { error: coverError } = await supabase
+            .from("episodes")
+            .update({ cover_url: coverUrl })
+            .eq("id", episode.id);
+          if (coverError) throw coverError;
+          episode.cover_url = coverUrl;
+        } catch (e) {
+          console.log("[episodes] cover upload failed:", e);
+          coverFailed = true;
+        }
+      }
+
       const uploaded: { url: string; type: string }[] = [];
       let failedMedia = 0;
-      let coverUrl: string | null = null;
       for (const asset of input.assets) {
         try {
           const url = await uploadMedia(
@@ -115,7 +141,6 @@ export function useCreateEpisode() {
             asset,
           );
           uploaded.push({ url, type: asset.type });
-          if (!coverUrl && asset.type === "image") coverUrl = url;
         } catch (e) {
           console.log("[episodes] media upload failed:", e);
           failedMedia += 1;
@@ -135,16 +160,10 @@ export function useCreateEpisode() {
         if (mediaError) {
           console.log("[episodes] media rows insert failed:", mediaError);
           failedMedia += uploaded.length;
-          coverUrl = null;
         }
       }
 
-      if (coverUrl) {
-        await supabase.from("episodes").update({ cover_url: coverUrl }).eq("id", episode.id);
-        episode.cover_url = coverUrl;
-      }
-
-      return { episode, failedMedia };
+      return { episode, failedMedia, coverFailed };
     },
     onSuccess: ({ episode }) => {
       queryClient.invalidateQueries({ queryKey: qk.episodes(episode.space_id) });
@@ -152,7 +171,29 @@ export function useCreateEpisode() {
   });
 }
 
-/** Adds extra media to an existing episode (camera/gallery). */
+/**
+ * Sets or replaces an episode's cover. The image is uploaded on the "covers"
+ * path and no `episode_media` row is created for it: the poster and the album
+ * are two different things, and changing one must not touch the other.
+ */
+export function useSetEpisodeCover(episodeId: string, spaceId: string) {
+  const { userId } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (asset: PickedAsset): Promise<string> => {
+      const url = await uploadMedia({ kind: "covers", spaceId, userId, episodeId }, asset);
+      const { error } = await supabase.from("episodes").update({ cover_url: url }).eq("id", episodeId);
+      if (error) throw error;
+      return url;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: qk.episode(episodeId) });
+      queryClient.invalidateQueries({ queryKey: qk.episodes(spaceId) });
+    },
+  });
+}
+
+/** Adds extra media to an existing episode's album (camera/gallery). */
 export function useAddEpisodeMedia(episodeId: string, spaceId: string) {
   const { userId } = useAuth();
   const queryClient = useQueryClient();

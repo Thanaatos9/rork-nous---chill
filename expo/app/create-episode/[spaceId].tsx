@@ -1,10 +1,10 @@
 import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { Camera, Clock, Eye, Images, MapPin, Plus, Tag, Video, X } from "lucide-react-native";
+import { Camera, Clock, Eye, Image as ImageIcon, Images, MapPin, Plus, Tag, Video, X } from "lucide-react-native";
 import { useState } from "react";
 import { ScrollView, TouchableOpacity, View } from "react-native";
-import { IconButton } from "@/components/ui/Button";
-import { Button } from "@/components/ui/Button";
+import { CoverAdjustModal } from "@/components/CoverAdjustModal";
+import { Button, IconButton } from "@/components/ui/Button";
 import { Screen } from "@/components/ui/Card";
 import { DateField } from "@/components/ui/DateField";
 import { Field, Input } from "@/components/ui/Input";
@@ -12,7 +12,7 @@ import { FadeIn, PressableScale } from "@/components/ui/motion";
 import { AppText } from "@/components/ui/Text";
 import { colors, radius, spacing } from "@/constants/theme";
 import { friendlyError } from "@/lib/errors";
-import { captureWithCamera, pickFromLibrary, PickedAsset } from "@/lib/media";
+import { captureWithCamera, pickCoverImage, pickFromLibrary, PickedAsset } from "@/lib/media";
 import { canParticipate } from "@/lib/types";
 import { useCreateEpisode } from "@/hooks/useEpisodes";
 import { useSpace } from "@/hooks/useSpaces";
@@ -34,8 +34,19 @@ export default function CreateEpisodeScreen() {
   const [durationStr, setDurationStr] = useState<string>("");
   const [tags, setTags] = useState<string[]>([]);
   const [tagDraft, setTagDraft] = useState<string>("");
+  const [cover, setCover] = useState<PickedAsset | null>(null);
+  const [pendingCover, setPendingCover] = useState<PickedAsset | null>(null);
   const [assets, setAssets] = useState<PickedAsset[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
+
+  const onPickCover = async () => {
+    try {
+      const asset = await pickCoverImage();
+      if (asset) setPendingCover(asset);
+    } catch (e) {
+      toast.error(friendlyError(e));
+    }
+  };
 
   const addTag = (raw: string) => {
     const t = raw.trim();
@@ -71,16 +82,19 @@ export default function CreateEpisodeScreen() {
     setLoading(true);
     try {
       const durationNum = durationStr.trim() ? Number(durationStr.replace(/[^0-9]/g, "")) : null;
-      const { failedMedia } = await createEpisode.mutateAsync({
+      const { failedMedia, coverFailed } = await createEpisode.mutateAsync({
         spaceId,
         title,
         date: date.toISOString(),
         place,
         duration: durationNum && !isNaN(durationNum) ? durationNum : null,
         tags,
+        cover,
         assets,
       });
-      if (failedMedia > 0) {
+      if (coverFailed) {
+        toast.info("Épisode créé, mais la couverture n'a pas pu être envoyée. Réessaie depuis l'épisode.");
+      } else if (failedMedia > 0) {
         toast.info(
           failedMedia > 1
             ? `Épisode créé, mais ${failedMedia} médias n'ont pas pu être envoyés. Réessaie depuis l'épisode.`
@@ -130,8 +144,44 @@ export default function CreateEpisodeScreen() {
 
       <FadeIn>
         <View style={{ gap: spacing.lg }}>
-          {/* Media */}
-          <Field label="Photos & vidéos">
+          {/* Cover — the poster of the episode, deliberately separate from the
+              album below: it is the only image that shows up on the card and at
+              the top of the episode, and it never changes on its own. */}
+          <Field label="Photo de couverture" hint="L'affiche de l'épisode. Elle ne bougera plus ensuite.">
+            <TouchableOpacity activeOpacity={0.85} onPress={onPickCover}>
+              <View
+                style={{
+                  height: 170,
+                  borderRadius: radius.xl,
+                  borderWidth: cover ? 0 : 1.5,
+                  borderColor: colors.borderStrong,
+                  borderStyle: cover ? "solid" : "dashed",
+                  backgroundColor: colors.card,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  overflow: "hidden",
+                }}
+              >
+                {cover ? (
+                  <>
+                    <Image source={{ uri: cover.uri }} style={{ position: "absolute", width: "100%", height: "100%" }} contentFit="cover" />
+                    <View style={{ position: "absolute", bottom: 10, right: 10, flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(0,0,0,0.55)", paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill }}>
+                      <Camera size={14} color="#fff" />
+                      <AppText style={{ color: "#fff", fontSize: 12.5, fontWeight: "600" }}>Changer</AppText>
+                    </View>
+                  </>
+                ) : (
+                  <View style={{ alignItems: "center", gap: 8 }}>
+                    <ImageIcon size={26} color={colors.textMuted} />
+                    <AppText variant="bodyMuted">Choisir la couverture</AppText>
+                  </View>
+                )}
+              </View>
+            </TouchableOpacity>
+          </Field>
+
+          {/* Album */}
+          <Field label="Galerie" hint="Toutes les photos et vidéos du moment, consultables dans l'épisode.">
             <View style={{ flexDirection: "row", gap: spacing.md }}>
               <Button title="Galerie" variant="secondary" icon={<Images size={18} color={colors.text} />} onPress={addFromLibrary} style={{ flex: 1 }} />
               <Button title="Caméra" variant="secondary" icon={<Camera size={18} color={colors.text} />} onPress={addFromCamera} style={{ flex: 1 }} />
@@ -215,6 +265,15 @@ export default function CreateEpisodeScreen() {
           <Button title={loading ? "Publication…" : "Publier l'épisode"} size="lg" onPress={onSubmit} loading={loading} style={{ marginTop: spacing.sm }} />
         </View>
       </FadeIn>
+
+      <CoverAdjustModal
+        asset={pendingCover}
+        onCancel={() => setPendingCover(null)}
+        onDone={(cropped) => {
+          setCover(cropped);
+          setPendingCover(null);
+        }}
+      />
     </Screen>
   );
 }
