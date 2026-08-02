@@ -150,6 +150,39 @@ async function readAssetBytes(uri: string): Promise<ArrayBuffer> {
   throw new Error("Impossible de lire le fichier sélectionné. Réessaie avec une autre image.");
 }
 
+/**
+ * Longest edge kept when uploading a photo. Straight out of a phone camera an
+ * image is 4000px and several megabytes, while nothing in the app ever renders
+ * it wider than a screen. Shrinking first makes the upload far more likely to
+ * succeed on mobile data — and keeps the base64 fallback path from holding a
+ * huge string in memory.
+ */
+const MAX_UPLOAD_DIMENSION = 2000;
+
+async function downscaleImage(asset: PickedAsset): Promise<PickedAsset> {
+  const longestEdge = Math.max(asset.width ?? 0, asset.height ?? 0);
+  if (longestEdge <= MAX_UPLOAD_DIMENSION) return asset;
+
+  try {
+    const context = ImageManipulator.manipulate(asset.uri);
+    const landscape = (asset.width ?? 0) >= (asset.height ?? 0);
+    context.resize(landscape ? { width: MAX_UPLOAD_DIMENSION } : { height: MAX_UPLOAD_DIMENSION });
+    const rendered = await context.renderAsync();
+    const saved = await rendered.saveAsync({ format: SaveFormat.JPEG, compress: 0.8 });
+    try {
+      rendered.release?.();
+      context.release?.();
+    } catch {
+      // Releasing shared objects is a memory optimization only.
+    }
+    return { uri: saved.uri, type: "image", mimeType: "image/jpeg", width: saved.width, height: saved.height };
+  } catch (e) {
+    // Never block an upload on the resize step.
+    console.log("[media] downscale failed, sending the original:", e);
+    return asset;
+  }
+}
+
 export type UploadKind = "covers" | "avatars" | "episodes";
 
 export interface UploadContext {
@@ -230,8 +263,9 @@ async function uploadBytes(folder: string, bytes: ArrayBuffer, mimeType: string,
  * avatars keep working even if the storage rules refuse every path.
  */
 export async function uploadMedia(ctx: UploadContext, asset: PickedAsset): Promise<string> {
-  const ext = asset.type === "video" ? "mp4" : asset.mimeType.includes("png") ? "png" : "jpg";
-  const bytes = await readAssetBytes(asset.uri);
+  const source = asset.type === "image" ? await downscaleImage(asset) : asset;
+  const ext = source.type === "video" ? "mp4" : source.mimeType.includes("png") ? "png" : "jpg";
+  const bytes = await readAssetBytes(source.uri);
   if (!bytes || bytes.byteLength === 0) {
     throw new Error("Le fichier sélectionné est vide.");
   }
@@ -249,7 +283,7 @@ export async function uploadMedia(ctx: UploadContext, asset: PickedAsset): Promi
   let lastError: unknown = null;
   for (const candidate of candidates) {
     try {
-      const url = await uploadBytes(candidate.folder, bytes, asset.mimeType, ext);
+      const url = await uploadBytes(candidate.folder, bytes, source.mimeType, ext);
       console.log(`[media] upload OK via template "${candidate.template}" (${candidate.folder})`);
       if (candidate.template !== cached) writeCachedTemplate(candidate.template);
       return url;
@@ -264,9 +298,9 @@ export async function uploadMedia(ctx: UploadContext, asset: PickedAsset): Promi
   // Storage refused every path (or none was buildable). Small images can be
   // stored inline as a data URL — renders everywhere (web, RN, iOS) and keeps
   // the feature usable no matter what the storage rules are.
-  if (ctx.kind !== "episodes" && asset.type === "image" && bytes.byteLength <= INLINE_FALLBACK_MAX_BYTES) {
+  if (ctx.kind !== "episodes" && source.type === "image" && bytes.byteLength <= INLINE_FALLBACK_MAX_BYTES) {
     console.log("[media] all storage paths refused — using inline image fallback");
-    return `data:${asset.mimeType};base64,${encode(bytes)}`;
+    return `data:${source.mimeType};base64,${encode(bytes)}`;
   }
 
   console.log("[media] upload failed on every candidate:", lastError);

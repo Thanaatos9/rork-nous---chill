@@ -198,8 +198,12 @@ export default function EpisodeDetailScreen() {
     try {
       const picked = await pickFromLibrary(true);
       if (picked.length) {
-        await addMedia.mutateAsync(picked);
-        toast.success("Médias ajoutés");
+        const { added, failed } = await addMedia.mutateAsync(picked);
+        if (failed > 0) {
+          toast.info(`${added} média${added > 1 ? "s ajoutés" : " ajouté"}, ${failed} en échec.`);
+        } else {
+          toast.success(added > 1 ? "Médias ajoutés" : "Média ajouté");
+        }
       }
     } catch (e) {
       toast.error(friendlyError(e));

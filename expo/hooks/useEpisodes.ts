@@ -57,11 +57,17 @@ export interface CreateEpisodeInput {
   assets: PickedAsset[];
 }
 
+export interface CreatedEpisode {
+  episode: Episode;
+  /** Media that could not be sent. The episode is kept either way. */
+  failedMedia: number;
+}
+
 export function useCreateEpisode() {
   const { userId } = useAuth();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (input: CreateEpisodeInput): Promise<Episode> => {
+    mutationFn: async (input: CreateEpisodeInput): Promise<CreatedEpisode> => {
       // Episodes carry a sequential, per-space number (#1, #2, …) on a NOT NULL
       // column, so compute the next one from the current highest in this space.
       const { data: last } = await supabase
@@ -74,7 +80,7 @@ export function useCreateEpisode() {
       const nextNumber = ((last?.number as number | null | undefined) ?? 0) + 1;
 
       // The episode is created first so uploads can use its id in candidate
-      // storage paths; a failed upload rolls the episode back.
+      // storage paths.
       const { data, error } = await supabase
         .from("episodes")
         .insert({
@@ -95,44 +101,52 @@ export function useCreateEpisode() {
       if (error) throw error;
       const episode = data as Episode;
 
-      try {
-        const uploaded: { url: string; type: string }[] = [];
-        let coverUrl: string | null = null;
-        for (const asset of input.assets) {
+      // Media is best-effort from here on. Deleting the episode because one
+      // photo failed to upload throws away everything the user typed — they can
+      // always add the missing media afterwards, so keep the episode and report
+      // what did not make it.
+      const uploaded: { url: string; type: string }[] = [];
+      let failedMedia = 0;
+      let coverUrl: string | null = null;
+      for (const asset of input.assets) {
+        try {
           const url = await uploadMedia(
             { kind: "episodes", spaceId: input.spaceId, userId, episodeId: episode.id },
             asset,
           );
           uploaded.push({ url, type: asset.type });
           if (!coverUrl && asset.type === "image") coverUrl = url;
+        } catch (e) {
+          console.log("[episodes] media upload failed:", e);
+          failedMedia += 1;
         }
-
-        if (uploaded.length > 0) {
-          const rows = uploaded.map((u) => ({
-            episode_id: episode.id,
-            space_id: input.spaceId,
-            url: u.url,
-            filename: u.url.split("/").pop() || "media",
-            type: u.type,
-            uploaded_by: userId,
-          }));
-          const { error: mediaError } = await supabase.from("episode_media").insert(rows);
-          if (mediaError) throw mediaError;
-        }
-
-        if (coverUrl) {
-          await supabase.from("episodes").update({ cover_url: coverUrl }).eq("id", episode.id);
-          episode.cover_url = coverUrl;
-        }
-
-        return episode;
-      } catch (uploadError) {
-        // Best-effort rollback so a failed upload doesn't leave an empty episode.
-        await supabase.from("episodes").delete().eq("id", episode.id);
-        throw uploadError;
       }
+
+      if (uploaded.length > 0) {
+        const rows = uploaded.map((u) => ({
+          episode_id: episode.id,
+          space_id: input.spaceId,
+          url: u.url,
+          filename: u.url.split("/").pop() || "media",
+          type: u.type,
+          uploaded_by: userId,
+        }));
+        const { error: mediaError } = await supabase.from("episode_media").insert(rows);
+        if (mediaError) {
+          console.log("[episodes] media rows insert failed:", mediaError);
+          failedMedia += uploaded.length;
+          coverUrl = null;
+        }
+      }
+
+      if (coverUrl) {
+        await supabase.from("episodes").update({ cover_url: coverUrl }).eq("id", episode.id);
+        episode.cover_url = coverUrl;
+      }
+
+      return { episode, failedMedia };
     },
-    onSuccess: (episode) => {
+    onSuccess: ({ episode }) => {
       queryClient.invalidateQueries({ queryKey: qk.episodes(episode.space_id) });
     },
   });
@@ -143,7 +157,7 @@ export function useAddEpisodeMedia(episodeId: string, spaceId: string) {
   const { userId } = useAuth();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (assets: PickedAsset[]): Promise<void> => {
+    mutationFn: async (assets: PickedAsset[]): Promise<{ added: number; failed: number }> => {
       const rows: {
         episode_id: string;
         space_id: string;
@@ -152,21 +166,32 @@ export function useAddEpisodeMedia(episodeId: string, spaceId: string) {
         type: string;
         uploaded_by: string | null;
       }[] = [];
+      let failed = 0;
+      // One unsendable file must not discard the ones that went through.
       for (const asset of assets) {
-        const url = await uploadMedia({ kind: "episodes", spaceId, userId, episodeId }, asset);
-        rows.push({
-          episode_id: episodeId,
-          space_id: spaceId,
-          url,
-          filename: url.split("/").pop() || "media",
-          type: asset.type,
-          uploaded_by: userId,
-        });
+        try {
+          const url = await uploadMedia({ kind: "episodes", spaceId, userId, episodeId }, asset);
+          rows.push({
+            episode_id: episodeId,
+            space_id: spaceId,
+            url,
+            filename: url.split("/").pop() || "media",
+            type: asset.type,
+            uploaded_by: userId,
+          });
+        } catch (e) {
+          console.log("[episodes] media upload failed:", e);
+          failed += 1;
+        }
       }
       if (rows.length > 0) {
         const { error } = await supabase.from("episode_media").insert(rows);
         if (error) throw error;
+      } else if (failed > 0) {
+        // Nothing survived — surface the failure instead of a silent success.
+        throw new Error("L'envoi des médias a échoué. Réessaie dans un instant.");
       }
+      return { added: rows.length, failed };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: qk.episode(episodeId) });

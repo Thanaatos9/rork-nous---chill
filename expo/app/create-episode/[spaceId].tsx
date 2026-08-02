@@ -71,7 +71,7 @@ export default function CreateEpisodeScreen() {
     setLoading(true);
     try {
       const durationNum = durationStr.trim() ? Number(durationStr.replace(/[^0-9]/g, "")) : null;
-      await createEpisode.mutateAsync({
+      const { failedMedia } = await createEpisode.mutateAsync({
         spaceId,
         title,
         date: date.toISOString(),
@@ -80,7 +80,15 @@ export default function CreateEpisodeScreen() {
         tags,
         assets,
       });
-      toast.success("Épisode créé 🎬");
+      if (failedMedia > 0) {
+        toast.info(
+          failedMedia > 1
+            ? `Épisode créé, mais ${failedMedia} médias n'ont pas pu être envoyés. Réessaie depuis l'épisode.`
+            : "Épisode créé, mais un média n'a pas pu être envoyé. Réessaie depuis l'épisode.",
+        );
+      } else {
+        toast.success("Épisode créé 🎬");
+      }
       router.back();
     } catch (e) {
       toast.error(friendlyError(e));
