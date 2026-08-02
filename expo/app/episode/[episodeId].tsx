@@ -193,6 +193,7 @@ export default function EpisodeDetailScreen() {
   }
 
   const tags = normalizeTags(episode.tags);
+  const mediaCount = episode.media?.length ?? 0;
 
   const onAddMedia = async () => {
     try {
@@ -226,11 +227,8 @@ export default function EpisodeDetailScreen() {
         {/* Hero gallery */}
         <View>
           <MediaGallery media={episode.media ?? []} height={380} />
-          <View style={{ position: "absolute", top: insets.top + 6, left: spacing.lg, right: spacing.lg, flexDirection: "row", justifyContent: "space-between" }}>
+          <View style={{ position: "absolute", top: insets.top + 6, left: spacing.lg }}>
             <IconButton icon={<ChevronLeft size={22} color="#fff" />} onPress={() => router.back()} size={42} style={{ backgroundColor: "rgba(0,0,0,0.45)" }} accessibilityLabel="Retour" />
-            {participate ? (
-              <IconButton icon={<ImagePlus size={20} color="#fff" />} onPress={onAddMedia} size={42} style={{ backgroundColor: "rgba(0,0,0,0.45)" }} accessibilityLabel="Ajouter des photos ou vidéos" />
-            ) : null}
           </View>
         </View>
 
@@ -263,6 +261,20 @@ export default function EpisodeDetailScreen() {
               ) : null}
             </View>
           </FadeIn>
+
+          {/* Media. The add control used to be a translucent icon sitting on top
+              of the hero photo, where nobody ever found it — it is a named
+              button in the page flow now. */}
+          {participate ? (
+            <Button
+              title={mediaCount > 0 ? "Ajouter des photos ou vidéos" : "Ajouter les premières photos"}
+              variant="secondary"
+              icon={<ImagePlus size={18} color={colors.text} />}
+              onPress={onAddMedia}
+              loading={addMedia.isPending}
+              fullWidth
+            />
+          ) : null}
 
           {/* Like / comment counts */}
           <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.xl }}>
