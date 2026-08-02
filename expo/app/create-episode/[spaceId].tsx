@@ -4,6 +4,7 @@ import { Camera, Clock, Eye, Image as ImageIcon, Images, MapPin, Plus, Tag, Vide
 import { useState } from "react";
 import { ScrollView, TouchableOpacity, View } from "react-native";
 import { CoverAdjustModal } from "@/components/CoverAdjustModal";
+import { VideoPoster } from "@/components/VideoSurface";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Screen } from "@/components/ui/Card";
 import { DateField } from "@/components/ui/DateField";
@@ -190,7 +191,13 @@ export default function CreateEpisodeScreen() {
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm, marginTop: spacing.md }}>
                 {assets.map((a, i) => (
                   <View key={`${a.uri}-${i}`} style={{ width: 84, height: 110, borderRadius: radius.md, overflow: "hidden", backgroundColor: colors.surface }}>
-                    <Image source={{ uri: a.uri }} style={{ width: "100%", height: "100%" }} contentFit="cover" />
+                    {a.type === "video" ? (
+                      // An image component has nothing to show for an .mp4 —
+                      // the tile pulls a frame out of the clip instead.
+                      <VideoPoster url={a.uri} play="none" style={{ width: "100%", height: "100%" }} />
+                    ) : (
+                      <Image source={{ uri: a.uri }} style={{ width: "100%", height: "100%" }} contentFit="cover" />
+                    )}
                     {a.type === "video" ? (
                       <View style={{ position: "absolute", bottom: 6, left: 6, backgroundColor: "rgba(0,0,0,0.6)", borderRadius: radius.sm, padding: 3 }}>
                         <Video size={13} color="#fff" />

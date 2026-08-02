@@ -1,33 +1,34 @@
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { useVideoPlayer, VideoView } from "expo-video";
-import { Play, X } from "lucide-react-native";
+import { X } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
-import { Dimensions, Modal, NativeScrollEvent, NativeSyntheticEvent, Pressable, ScrollView, View } from "react-native";
+import { Modal, NativeScrollEvent, NativeSyntheticEvent, Pressable, ScrollView, useWindowDimensions, View } from "react-native";
+import { FullscreenVideo, VideoPoster } from "@/components/VideoSurface";
 import { AppText } from "@/components/ui/Text";
 import { IconButton } from "@/components/ui/Button";
 import { colors, radius, spacing } from "@/constants/theme";
 import type { EpisodeMedia } from "@/lib/types";
 
-const W = Dimensions.get("window").width;
-
-function VideoPage({ uri, active }: { uri: string; active: boolean }) {
-  const player = useVideoPlayer(uri, (p) => {
-    p.loop = true;
-  });
-  useEffect(() => {
-    if (active) player.play();
-    else player.pause();
-  }, [active, player]);
-  return <VideoView player={player} style={{ flex: 1 }} contentFit="contain" nativeControls allowsFullscreen />;
+/** A media row without a type is a photo — the column arrived after the app did. */
+function isVideo(m: EpisodeMedia): boolean {
+  return m.type === "video";
 }
 
 function FullscreenViewer({ media, initialIndex, onClose }: { media: EpisodeMedia[]; initialIndex: number; onClose: () => void }) {
   const [active, setActive] = useState<number>(initialIndex);
   const scrollRef = useRef<ScrollView>(null);
+  // Read at render rather than once at import: the paging width has to be the
+  // width the pages are actually laid out at, rotation and split view included.
+  const { width, height } = useWindowDimensions();
+
+  // `contentOffset` below only lands on iOS: without this, tapping the fourth
+  // clip of an album opened the first one on Android.
+  useEffect(() => {
+    if (initialIndex > 0) scrollRef.current?.scrollTo({ x: initialIndex * width, animated: false });
+  }, [initialIndex, width]);
 
   const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    setActive(Math.round(e.nativeEvent.contentOffset.x / W));
+    setActive(Math.round(e.nativeEvent.contentOffset.x / width));
   };
 
   return (
@@ -38,15 +39,18 @@ function FullscreenViewer({ media, initialIndex, onClose }: { media: EpisodeMedi
           horizontal
           pagingEnabled
           showsHorizontalScrollIndicator={false}
-          contentOffset={{ x: initialIndex * W, y: 0 }}
+          contentOffset={{ x: initialIndex * width, y: 0 }}
           onMomentumScrollEnd={onScroll}
         >
           {media.map((m, i) => (
-            <View key={m.id} style={{ width: W, height: "100%", alignItems: "center", justifyContent: "center" }}>
-              {m.type === "video" ? (
-                <VideoPage uri={m.url} active={i === active} />
+            <View key={m.id} style={{ width, height: "100%", alignItems: "center", justifyContent: "center" }}>
+              {isVideo(m) ? (
+                // Sized in points, never left to the native surface — a video
+                // that measures itself lands far wider than the screen and
+                // shows as a zoomed-in crop.
+                <FullscreenVideo url={m.url} width={width} height={height} active={i === active} />
               ) : (
-                <Image source={{ uri: m.url }} style={{ width: W, height: "100%" }} contentFit="contain" transition={150} />
+                <Image source={{ uri: m.url }} style={{ width, height }} contentFit="contain" transition={150} />
               )}
             </View>
           ))}
@@ -102,13 +106,13 @@ export function MediaGrid({
               key={m.id}
               onPress={() => setViewer(i)}
               accessibilityRole="imagebutton"
-              accessibilityLabel={m.type === "video" ? "Voir la vidéo" : "Voir la photo"}
+              accessibilityLabel={isVideo(m) ? "Voir la vidéo" : "Voir la photo"}
               style={{ width: tile, height: tile, borderRadius: radius.md, overflow: "hidden", backgroundColor: colors.surface }}
             >
-              {m.type === "video" ? (
-                <View style={{ flex: 1, backgroundColor: "#0A0A0B", alignItems: "center", justifyContent: "center" }}>
-                  <Play size={22} color="#fff" fill="#fff" style={{ marginLeft: 2 }} />
-                </View>
+              {isVideo(m) ? (
+                // A frame out of the clip, so the album shows what was filmed
+                // instead of a row of identical black squares.
+                <VideoPoster url={m.url} play="small" style={{ width: "100%", height: "100%" }} />
               ) : (
                 <Image source={{ uri: m.url }} style={{ width: "100%", height: "100%" }} contentFit="cover" transition={150} />
               )}
@@ -118,7 +122,7 @@ export function MediaGrid({
                   onPress={() => onDelete(m)}
                   hitSlop={8}
                   accessibilityRole="button"
-                  accessibilityLabel={m.type === "video" ? "Supprimer la vidéo" : "Supprimer la photo"}
+                  accessibilityLabel={isVideo(m) ? "Supprimer la vidéo" : "Supprimer la photo"}
                   style={{ position: "absolute", top: 4, right: 4, backgroundColor: "rgba(0,0,0,0.65)", borderRadius: radius.pill, padding: 4 }}
                 >
                   <X size={13} color="#fff" />
@@ -136,6 +140,7 @@ export function MediaGrid({
 export function MediaGallery({ media, height = 360, emoji = "🎬" }: { media: EpisodeMedia[]; height?: number; emoji?: string }) {
   const [index, setIndex] = useState<number>(0);
   const [viewer, setViewer] = useState<number | null>(null);
+  const { width } = useWindowDimensions();
 
   if (!media || media.length === 0) {
     return (
@@ -146,23 +151,20 @@ export function MediaGallery({ media, height = 360, emoji = "🎬" }: { media: E
   }
 
   const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    setIndex(Math.round(e.nativeEvent.contentOffset.x / W));
+    setIndex(Math.round(e.nativeEvent.contentOffset.x / width));
   };
 
   return (
     <View style={{ height }}>
       <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} onMomentumScrollEnd={onScroll}>
         {media.map((m, i) => (
-          <Pressable key={m.id} onPress={() => setViewer(i)} style={{ width: W, height }}>
-            {m.type === "video" ? (
-              <View style={{ flex: 1, backgroundColor: "#0A0A0B", alignItems: "center", justifyContent: "center", gap: 10 }}>
-                <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: "rgba(255,255,255,0.14)", alignItems: "center", justifyContent: "center" }}>
-                  <Play size={28} color="#fff" fill="#fff" style={{ marginLeft: 3 }} />
-                </View>
-                <AppText style={{ color: "rgba(255,255,255,0.7)", fontWeight: "600", fontSize: 13 }}>Lire la vidéo</AppText>
-              </View>
+          <Pressable key={m.id} onPress={() => setViewer(i)} style={{ width, height }}>
+            {isVideo(m) ? (
+              // The hero is a poster slot: the frame is cropped to fill it like
+              // a cover photo, and tapping opens the clip full screen.
+              <VideoPoster url={m.url} contentFit="cover" play="large" label="Lire la vidéo" style={{ width, height }} />
             ) : (
-              <Image source={{ uri: m.url }} style={{ width: W, height }} contentFit="cover" transition={200} />
+              <Image source={{ uri: m.url }} style={{ width, height }} contentFit="cover" transition={200} />
             )}
           </Pressable>
         ))}

@@ -1,10 +1,10 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { useVideoPlayer, VideoView } from "expo-video";
 import { Clapperboard, Film, Lock, Share2, Sparkles, Users } from "lucide-react-native";
 import React from "react";
 import { Alert, RefreshControl, Share, View } from "react-native";
 import { SpaceSwitcher } from "@/components/SpaceSwitcher";
+import { InlineVideo } from "@/components/VideoSurface";
 import { Button } from "@/components/ui/Button";
 import { Card, Screen, SectionHeader } from "@/components/ui/Card";
 import { EmptyState, Loader } from "@/components/ui/Feedback";
@@ -32,11 +32,11 @@ function extractSummary(synthese: Synthese | null | undefined): string | null {
   return null;
 }
 
+// The souvenir is edited elsewhere and comes back in whatever shape it was cut
+// — portrait as often as not. InlineVideo sizes its box to the clip instead of
+// forcing a 16:9 frame around it.
 function SouvenirVideo({ url }: { url: string }) {
-  const player = useVideoPlayer(url, (p) => {
-    p.loop = false;
-  });
-  return <VideoView player={player} style={{ width: "100%", aspectRatio: 16 / 9, borderRadius: radius.lg, backgroundColor: "#000" }} nativeControls contentFit="contain" />;
+  return <InlineVideo url={url} style={{ borderRadius: radius.lg }} />;
 }
 
 function StatBox({ label, value, icon }: { label: string; value: number; icon: React.ReactNode }) {
