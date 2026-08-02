@@ -14,7 +14,12 @@ export interface ReviewValues {
   song: string | null;
 }
 
-/** All reviews the backend exposes for an episode (own review always; others only after unlock). */
+/**
+ * All reviews the backend exposes for an episode: your own always, everyone
+ * else's once the episode is revealed — that is, once every participant has
+ * published theirs (or the owner force-unlocked the season). Before that, RLS
+ * returns a single row, so this list is not a way to know who has answered.
+ */
 export function useEpisodeReviews(episodeId: string) {
   return useQuery({
     queryKey: qk.reviews(episodeId),
@@ -29,6 +34,24 @@ export function useEpisodeReviews(episodeId: string) {
       const reviews = (data ?? []) as Review[];
       const profiles = await getProfilesMap(reviews.map((r) => r.author_id));
       return reviews.map((r) => ({ ...r, profile: profiles[r.author_id] ?? null }));
+    },
+  });
+}
+
+/**
+ * Who has already published for this episode — ids only, no content. The whole
+ * point of the seal is that the reviews themselves stay unreadable until the
+ * last one lands, so "qui a déjà répondu" cannot be derived from the rows the
+ * caller is allowed to select; the database answers it through a function.
+ */
+export function useEpisodeReviewAuthors(episodeId: string) {
+  return useQuery({
+    queryKey: qk.reviewAuthors(episodeId),
+    enabled: !!episodeId,
+    queryFn: async (): Promise<string[]> => {
+      const { data, error } = await supabase.rpc("episode_review_authors", { p_episode_id: episodeId });
+      if (error) throw error;
+      return ((data ?? []) as { author_id: string }[]).map((r) => r.author_id);
     },
   });
 }
@@ -92,6 +115,12 @@ export function useUpsertReview() {
     onSuccess: (_review, variables) => {
       queryClient.invalidateQueries({ queryKey: qk.reviews(variables.episodeId) });
       queryClient.invalidateQueries({ queryKey: qk.myReview(variables.episodeId, userId) });
+      queryClient.invalidateQueries({ queryKey: qk.reviewAuthors(variables.episodeId) });
+      // This review may have been the last one missing, in which case the
+      // database just stamped `reviews_revealed_at` on the episode — refetch it
+      // so the screen opens on the reveal instead of the sealed card.
+      queryClient.invalidateQueries({ queryKey: qk.episode(variables.episodeId) });
+      queryClient.invalidateQueries({ queryKey: qk.episodes(variables.spaceId) });
     },
   });
 }

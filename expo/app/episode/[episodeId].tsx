@@ -45,7 +45,7 @@ import {
   useToggleLike,
 } from "@/hooks/useEpisodes";
 import { useMembers } from "@/hooks/useMembers";
-import { useEpisodeReviews, useMyReview } from "@/hooks/useReviews";
+import { useEpisodeReviewAuthors, useEpisodeReviews, useMyReview } from "@/hooks/useReviews";
 import { useAddComment, useComments, useDeleteComment, useToggleReaction } from "@/hooks/useSocial";
 import { useSpace } from "@/hooks/useSpaces";
 import { useAuth } from "@/providers/auth";
@@ -169,6 +169,7 @@ export default function EpisodeDetailScreen() {
   const { data: space } = useSpace(spaceId);
   const { data: members } = useMembers(spaceId);
   const { data: reviews } = useEpisodeReviews(episodeId);
+  const { data: reviewAuthors } = useEpisodeReviewAuthors(episodeId);
   const { data: myReview } = useMyReview(episodeId);
   const { data: comments } = useComments(episodeId);
   const { data: likes } = useEpisodeLikes(episodeId);
@@ -194,12 +195,24 @@ export default function EpisodeDetailScreen() {
   // Destructive actions stay with the space owner and the person who wrote the
   // episode — not with every participant.
   const canManage = isOwner(space?.membership) || (!!userId && episode?.created_by === userId);
-  const unlocked = !!space?.season_unlocked;
 
-  const answeredIds = useMemo(() => new Set((reviews ?? []).map((r) => r.author_id)), [reviews]);
+  /**
+   * Who has published, whatever the caller is allowed to read. `reviewAuthors`
+   * is the authoritative list (a function that returns ids only); the rows from
+   * `reviews` are folded in as a fallback so your own "A répondu" still shows if
+   * that call fails.
+   */
+  const answeredIds = useMemo(
+    () => new Set([...(reviewAuthors ?? []), ...(reviews ?? []).map((r) => r.author_id)]),
+    [reviewAuthors, reviews]
+  );
   const reviewers: SpaceMember[] = useMemo(
     () => (members ?? []).filter((m) => m.role === "owner" || (m.role === "member" && m.can_create_episodes)),
     [members]
+  );
+  const pendingCount = useMemo(
+    () => reviewers.filter((m) => !answeredIds.has(m.user_id)).length,
+    [reviewers, answeredIds]
   );
 
   if (isLoading || !episode) {
@@ -209,6 +222,19 @@ export default function EpisodeDetailScreen() {
       </View>
     );
   }
+
+  // The reveal is per episode: the last participant to publish opens it for
+  // everyone. Unlocking the season stays the owner's escape hatch for episodes
+  // somebody never answered.
+  const revealed = !!episode.reviews_revealed_at || !!space?.season_unlocked;
+
+  /**
+   * Observers write comments only once the episode is revealed. Before that,
+   * an outside reaction would land on a moment its own participants have not
+   * finished describing — and could nudge what they are about to write. The
+   * database enforces the same rule (see the episode_comments policies).
+   */
+  const canComment = participate || (!!space?.membership && revealed);
 
   const tags = normalizeTags(episode.tags);
   const media = episode.media ?? [];
@@ -387,9 +413,18 @@ export default function EpisodeDetailScreen() {
 
           {/* Reviews / private mechanic */}
           <View style={{ gap: spacing.md }}>
-            <SectionHeader title={unlocked ? "Les reviews révélées" : "Reviews"} />
+            <SectionHeader
+              title={revealed ? "Les reviews révélées" : "Reviews"}
+              subtitle={
+                !revealed
+                  ? undefined
+                  : episode.reviews_revealed_at
+                  ? "Tout le monde a publié — voici ce que chacun a écrit"
+                  : "Révélées par le déverrouillage de la saison"
+              }
+            />
 
-            {unlocked ? (
+            {revealed ? (
               reviewers.length === 0 ? (
                 <AppText variant="bodyMuted">Personne n&apos;a participé à cet épisode.</AppText>
               ) : (
@@ -428,7 +463,14 @@ export default function EpisodeDetailScreen() {
                         </View>
                         {myReview.rating ? <RatingStars value={myReview.rating} size={15} /> : null}
                       </View>
-                      <AppText variant="bodyMuted">Elle sera révélée à tous au déverrouillage de la saison. Toi seul(e) peux la voir d&apos;ici là.</AppText>
+                      <AppText variant="bodyMuted">
+                        {pendingCount === 1
+                          ? "Il ne manque plus qu'une review : dès qu'elle arrive, tout se révèle d'un coup."
+                          : pendingCount > 1
+                          ? `Encore ${pendingCount} reviews à écrire dans le groupe, puis tout se révèle d'un coup.`
+                          : "Elle se révélera en même temps que celles des autres."}
+                        {" Toi seul(e) peux la voir d'ici là."}
+                      </AppText>
                       <Button title="Modifier ma review" variant="secondary" icon={<PenLine size={16} color={colors.text} />} onPress={() => router.push({ pathname: "/review/[episodeId]", params: { episodeId } })} />
                     </Card>
                   ) : (
@@ -438,7 +480,11 @@ export default function EpisodeDetailScreen() {
                           <PenLine size={24} color={colors.primary} />
                         </View>
                         <AppText variant="h3" center>Écris ta review en privé</AppText>
-                        <AppText variant="bodyMuted" center>Ce que tu ressens, ta note, ta citation préférée. Personne ne la verra avant la fin de saison.</AppText>
+                        <AppText variant="bodyMuted" center>
+                          {pendingCount === 1
+                            ? "Ce que tu ressens, ta note, ta citation préférée. Tu es la dernière personne à répondre : ta review révèle celles de tout le monde."
+                            : "Ce que tu ressens, ta note, ta citation préférée. Personne ne la verra tant que le groupe entier n'a pas publié la sienne."}
+                        </AppText>
                         <Button title="Écrire ma review" onPress={() => router.push({ pathname: "/review/[episodeId]", params: { episodeId } })} fullWidth />
                       </Card>
                     </Pulse>
@@ -447,7 +493,9 @@ export default function EpisodeDetailScreen() {
                   <Card style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
                     <Lock size={18} color={colors.textMuted} />
                     <AppText variant="bodyMuted" style={{ flex: 1 }}>
-                      {isObserver ? "En tant qu'observateur, tu ne rédiges pas de review — mais tu peux réagir et commenter." : "Tu pourras écrire ta review une fois promu."}
+                      {isObserver
+                        ? "En tant qu'observateur, tu ne rédiges pas de review. Tu pourras commenter l'épisode une fois que tout le groupe aura publié la sienne."
+                        : "Tu pourras écrire ta review une fois promu."}
                     </AppText>
                   </Card>
                 )}
@@ -455,7 +503,12 @@ export default function EpisodeDetailScreen() {
                 {/* Who answered */}
                 {reviewers.length > 0 ? (
                   <Card style={{ gap: spacing.md }}>
-                    <AppText variant="overline">Qui a déjà répondu</AppText>
+                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                      <AppText variant="overline">Qui a déjà répondu</AppText>
+                      <AppText variant="caption">
+                        {reviewers.length - pendingCount}/{reviewers.length}
+                      </AppText>
+                    </View>
                     {reviewers.map((member) => {
                       const answered = answeredIds.has(member.user_id);
                       return (
@@ -476,6 +529,13 @@ export default function EpisodeDetailScreen() {
                         </View>
                       );
                     })}
+                    <AppText variant="caption">
+                      {pendingCount === 0
+                        ? "Tout le monde a répondu — la révélation arrive."
+                        : pendingCount === 1
+                        ? "Une review manque encore. La dernière publiée révèle toutes les autres."
+                        : `${pendingCount} reviews manquent encore. La dernière publiée révèle toutes les autres.`}
+                    </AppText>
                   </Card>
                 ) : null}
               </>
@@ -530,7 +590,7 @@ export default function EpisodeDetailScreen() {
               <AppText variant="bodyMuted">Sois le premier à réagir à ce moment.</AppText>
             )}
 
-            {participate ? (
+            {canComment ? (
               <View style={{ flexDirection: "row", alignItems: "flex-end", gap: spacing.sm, marginTop: spacing.sm }}>
                 <TextInput
                   ref={draftGrow.ref}
@@ -550,7 +610,13 @@ export default function EpisodeDetailScreen() {
             ) : isObserver ? (
               <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: spacing.sm }}>
                 <Sparkles size={15} color={colors.textFaint} />
-                <AppText variant="caption">Les observateurs peuvent réagir aux commentaires existants.</AppText>
+                <AppText variant="caption" style={{ flex: 1 }}>
+                  {pendingCount === 1
+                    ? "Il manque encore une review : dès qu'elle arrive, tu pourras commenter. En attendant, tu peux réagir aux commentaires existants."
+                    : pendingCount > 1
+                    ? `Il manque encore ${pendingCount} reviews : dès que le groupe a terminé, tu pourras commenter. En attendant, tu peux réagir aux commentaires existants.`
+                    : "Tu pourras commenter dès que le groupe aura publié ses reviews. En attendant, tu peux réagir aux commentaires existants."}
+                </AppText>
               </View>
             ) : null}
           </View>

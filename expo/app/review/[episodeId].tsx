@@ -134,8 +134,9 @@ export default function ReviewScreen() {
     const pendingCount = assets.length;
     try {
       // Someone who only drops photos has not written a review: creating an
-      // empty row would show them as "a répondu" on the episode with nothing to
-      // reveal at the end of the saison. An existing review is still saved.
+      // empty row would count them as "a répondu" — which now also triggers the
+      // reveal for everyone, with nothing to show. An existing review is still
+      // saved.
       const savesReview = hasWritten || !!myReview;
       if (savesReview) {
         const values: ReviewValues = {
@@ -202,8 +203,9 @@ export default function ReviewScreen() {
         <Card glow style={{ flexDirection: "row", gap: 10, alignItems: "center", marginBottom: spacing.xl }}>
           <Lock size={16} color={colors.accent} />
           <AppText variant="caption" style={{ flex: 1, color: colors.textMuted }}>
-            Personne ne verra ce que tu écris avant la fin de la saison — ni les autres membres, ni le
-            propriétaire. Tout se révèle d&apos;un coup, en même temps.
+            Personne ne verra ce que tu écris tant que tout le groupe n&apos;a pas publié sa review sur cet
+            épisode — ni les autres membres, ni le propriétaire. La dernière publiée révèle toutes les
+            autres, d&apos;un coup.
           </AppText>
         </Card>
       </FadeIn>

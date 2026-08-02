@@ -57,6 +57,12 @@ export interface Episode {
   created_by: string;
   created_at: string;
   updated_at: string;
+  /**
+   * When the last participant published their review — the moment everyone's
+   * reviews became readable. Null while at least one is still missing. Set by
+   * the database, never by the app.
+   */
+  reviews_revealed_at: string | null;
   media?: EpisodeMedia[];
   media_count?: number;
 }

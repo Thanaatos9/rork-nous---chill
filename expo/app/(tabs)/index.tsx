@@ -209,7 +209,7 @@ export default function MomentsScreen() {
             )
           ) : (
             <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-              <AppText variant="bodyMuted">{status.daysLeft !== null ? `${status.daysLeft} j avant la révélation` : "Saison en cours"}</AppText>
+              <AppText variant="bodyMuted">{status.daysLeft !== null ? `${status.daysLeft} j avant la fin de la saison` : "Saison en cours"}</AppText>
               <Button title="Aperçu du bilan" variant="ghost" size="sm" onPress={() => router.push("/recap")} />
             </View>
           )}

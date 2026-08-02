@@ -57,7 +57,7 @@ const SLIDES: Slide[] = [
     key: "ideas",
     overline: "Étape 4 sur 4",
     title: "Idées et révélation",
-    body: "Proposez vos prochaines sorties et votez. Vos impressions sur chaque moment restent privées jusqu'à la fin de la saison — puis tout se révèle d'un coup.",
+    body: "Proposez vos prochaines sorties et votez. Vos impressions sur un moment restent privées tant que tout le groupe n'a pas écrit la sienne — puis elles se révèlent d'un coup.",
     icon: "ideas",
   },
 ];

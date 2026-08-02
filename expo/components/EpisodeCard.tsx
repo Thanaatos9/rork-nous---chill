@@ -1,6 +1,6 @@
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { ChevronRight, ImageIcon, MapPin, Video } from "lucide-react-native";
+import { ChevronRight, ImageIcon, MapPin, Sparkles, Video } from "lucide-react-native";
 import React from "react";
 import { View } from "react-native";
 import { Badge } from "@/components/ui/Badge";
@@ -32,6 +32,16 @@ function MediaCountBadge({ episode }: { episode: Episode }) {
   );
 }
 
+/**
+ * An episode reveals its reviews on its own, the moment the last participant
+ * publishes — nobody presses a button for it, so the list has to be where you
+ * notice it happened.
+ */
+function RevealedBadge({ episode }: { episode: Episode }) {
+  if (!episode.reviews_revealed_at) return null;
+  return <Badge label="Révélé" tone="gold" icon={<Sparkles size={11} color={colors.accent} />} />;
+}
+
 export function EpisodePoster({ episode, width = 144, index = 0, onPress }: { episode: Episode; width?: number; index?: number; onPress: () => void }) {
   const cover = getEpisodeCover(episode);
   return (
@@ -45,8 +55,11 @@ export function EpisodePoster({ episode, width = 144, index = 0, onPress }: { ep
           </LinearGradient>
         )}
         <LinearGradient colors={["transparent", "rgba(8,8,9,0.9)"]} locations={[0.4, 1]} style={{ position: "absolute", width: "100%", height: "100%" }} />
-        <View style={{ position: "absolute", top: 8, right: 8 }}>
-          <MediaCountBadge episode={episode} />
+        <View style={{ position: "absolute", top: 8, left: 8, right: 8, flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 6 }}>
+          <RevealedBadge episode={episode} />
+          <View style={{ marginLeft: "auto" }}>
+            <MediaCountBadge episode={episode} />
+          </View>
         </View>
         <View style={{ position: "absolute", bottom: 10, left: 10, right: 10, gap: 2 }}>
           <AppText numberOfLines={2} style={{ color: "#fff", fontSize: 14, fontWeight: "700", letterSpacing: -0.2 }}>
@@ -87,8 +100,9 @@ export function EpisodeRow({ episode, index = 0, onPress }: { episode: Episode; 
               </View>
             ) : null}
           </View>
-          {tags.length > 0 ? (
-            <View style={{ flexDirection: "row", gap: 5, marginTop: 1 }}>
+          {tags.length > 0 || episode.reviews_revealed_at ? (
+            <View style={{ flexDirection: "row", gap: 5, marginTop: 1, flexWrap: "wrap" }}>
+              <RevealedBadge episode={episode} />
               {tags.slice(0, 2).map((t) => (
                 <Badge key={t} label={t} tone="muted" />
               ))}

@@ -91,7 +91,7 @@ export default function RecapScreen() {
   const onUnlock = () => {
     Alert.alert(
       "Débloquer la saison ?",
-      "Toutes les reviews privées seront révélées à l'ensemble du groupe. Cette action lance le grand moment de vérité 🎬",
+      "Les épisodes où tout le monde a répondu se sont déjà révélés tout seuls. Débloquer la saison force les autres : les reviews encore scellées seront montrées au groupe, même incomplètes 🎬",
       [
         { text: "Annuler", style: "cancel" },
         {
@@ -136,7 +136,7 @@ export default function RecapScreen() {
                 <AppText variant="h2" center>Le bilan est scellé</AppText>
                 <AppText variant="bodyMuted" center style={{ maxWidth: 320 }}>
                   {status.daysLeft && status.daysLeft > 0
-                    ? `Encore ${status.daysLeft} jour${status.daysLeft > 1 ? "s" : ""} avant la révélation. Toutes les reviews seront dévoilées en même temps.`
+                    ? `Encore ${status.daysLeft} jour${status.daysLeft > 1 ? "s" : ""} de saison. Chaque épisode se révèle de son côté quand tout le monde a publié sa review — le bilan, lui, attend la fin.`
                     : "La saison touche à sa fin. Place au grand moment de vérité."}
                 </AppText>
               </View>
