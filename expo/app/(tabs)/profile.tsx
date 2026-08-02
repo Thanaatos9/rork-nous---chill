@@ -13,7 +13,7 @@ import { AppText } from "@/components/ui/Text";
 import { colors, radius, spacing } from "@/constants/theme";
 import { friendlyError } from "@/lib/errors";
 import { PickedAsset, pickAvatarImage, uploadMedia } from "@/lib/media";
-import { loadNotifications, registerPushToken } from "@/lib/push";
+import { disablePush, enablePush, pushPermission, pushSupported } from "@/lib/push";
 import { useUpdateProfile } from "@/hooks/useProfile";
 import { useActiveSpace } from "@/providers/activeSpace";
 import { useAuth } from "@/providers/auth";
@@ -58,33 +58,46 @@ function PushToggle() {
   const [enabled, setEnabled] = useState<boolean>(false);
 
   useEffect(() => {
-    loadNotifications()
-      ?.getPermissionsAsync()
-      .then((s) => setEnabled(s.granted))
+    pushPermission()
+      .then((p) => setEnabled(p === "granted"))
       .catch(() => {});
   }, []);
 
   const onToggle = async (value: boolean) => {
-    if (value) {
-      const Notifications = loadNotifications();
-      if (!Notifications) {
-        toast.info("Les notifications demandent l'app installée, pas Expo Go.");
-        return;
+    if (!userId) return;
+
+    // Turning it off is ours to do on the web — the browser lets a site drop its
+    // own subscription — while iOS and Android only take that back in settings.
+    if (!value) {
+      await disablePush(userId);
+      setEnabled(false);
+      toast.info(Platform.OS === "web" ? "Notifications désactivées" : "Pour les désactiver, passe par les réglages système.");
+      return;
+    }
+
+    if (pushSupported() === "unsupported") {
+      toast.info(
+        Platform.OS === "web"
+          ? "Ce navigateur ne gère pas les notifications. Installe l'app depuis ton navigateur pour les recevoir."
+          : "Les notifications demandent l'app installée, pas Expo Go.",
+      );
+      return;
+    }
+
+    try {
+      const result = await enablePush(userId);
+      setEnabled(result === "granted");
+      if (result === "granted") {
+        toast.success("Notifications activées");
+      } else {
+        toast.info(
+          Platform.OS === "web"
+            ? "Autorise les notifications dans les réglages du site."
+            : "Active les notifications dans les réglages de ton téléphone.",
+        );
       }
-      try {
-        const s = await Notifications.requestPermissionsAsync();
-        setEnabled(s.granted);
-        if (s.granted) {
-          if (userId) registerPushToken(userId);
-          toast.success("Notifications activées");
-        } else {
-          toast.info("Active les notifications dans les réglages de ton téléphone.");
-        }
-      } catch {
-        toast.error("Impossible d'activer les notifications ici.");
-      }
-    } else {
-      toast.info("Pour les désactiver, passe par les réglages système.");
+    } catch {
+      toast.error("Impossible d'activer les notifications ici.");
     }
   };
 

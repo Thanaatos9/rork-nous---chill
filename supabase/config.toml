@@ -1,0 +1,16 @@
+# Configuration du CLI Supabase pour ce dépôt.
+#
+# Elle existe surtout pour une ligne : `verify_jwt = false` sur send-push. Cette
+# fonction est appelée par la base de données elle-même, jamais par un
+# utilisateur connecté — il n'y a donc aucun JWT à vérifier. Elle authentifie
+# ses appelants toute seule, avec l'en-tête `x-push-secret` (voir
+# supabase/functions/send-push/index.ts).
+#
+# La déclarer ici plutôt que de passer --no-verify-jwt à chaque déploiement
+# évite qu'un déploiement futur la republie en mode fermé, où la base se
+# ferait refuser à l'entrée et où plus aucune notification ne partirait.
+
+project_id = "rork-nous-chill"
+
+[functions.send-push]
+verify_jwt = false

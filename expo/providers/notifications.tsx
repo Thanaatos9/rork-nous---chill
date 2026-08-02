@@ -21,6 +21,13 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
   }, [userId]);
 
   useEffect(() => {
+    // The web has its own delivery path end to end: the service worker receives
+    // the push and handles the click (see public/sw.js). expo-notifications has
+    // nothing to add there, and asking it for permissions would pop the browser
+    // prompt on load — which is both rude and, in Chrome, a good way to get
+    // push denied permanently. The switch in Réglages asks instead.
+    if (Platform.OS === "web") return;
+
     // Null in Expo Go, where notifications are unavailable anyway.
     const Notifications = loadNotifications();
     if (!Notifications) return;
