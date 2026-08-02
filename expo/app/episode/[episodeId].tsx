@@ -175,7 +175,7 @@ export default function EpisodeDetailScreen() {
   const { data: likes } = useEpisodeLikes(episodeId);
 
   const toggleLike = useToggleLike(episodeId);
-  const addComment = useAddComment(episodeId);
+  const addComment = useAddComment(episodeId, spaceId);
   const deleteComment = useDeleteComment(episodeId);
   const toggleReaction = useToggleReaction(episodeId);
   const addMedia = useAddEpisodeMedia(episodeId, spaceId);

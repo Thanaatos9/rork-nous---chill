@@ -42,13 +42,19 @@ export function useVideoAspectRatio(player: VideoPlayer): number | null {
  * again each time is a visible stutter. `null` is cached too — a file the
  * device cannot decode should be asked about once, not on every render.
  */
-const posterCache = new Map<string, VideoThumbnail | null>();
+/**
+ * A frame, however it was obtained: a native thumbnail object on iOS/Android, a
+ * data URL on the web. expo-image takes either as a source.
+ */
+type Poster = VideoThumbnail | string;
+
+const posterCache = new Map<string, Poster | null>();
 
 /** Each entry holds a native bitmap; a long session browsing seasons of videos
  *  would otherwise keep every frame it ever decoded. Oldest goes first. */
 const POSTER_CACHE_MAX = 80;
 
-function rememberPoster(url: string, thumbnail: VideoThumbnail | null): void {
+function rememberPoster(url: string, thumbnail: Poster | null): void {
   posterCache.set(url, thumbnail);
   while (posterCache.size > POSTER_CACHE_MAX) {
     const oldest = posterCache.keys().next().value;
@@ -64,13 +70,16 @@ function rememberPoster(url: string, thumbnail: VideoThumbnail | null): void {
  */
 let posterQueue: Promise<unknown> = Promise.resolve();
 
-async function extractPoster(url: string): Promise<VideoThumbnail | null> {
+/** A hair into the clip rather than at 0s: the first frame of a phone recording
+ *  is often black while the sensor settles. */
+const POSTER_TIME = 0.2;
+const POSTER_MAX_WIDTH = 720;
+
+async function extractPosterNative(url: string): Promise<Poster | null> {
   const player = createVideoPlayer(url);
   try {
     player.muted = true;
-    // A hair into the clip rather than at 0s: the very first frame of a phone
-    // recording is often black while the sensor settles.
-    const [thumbnail] = await player.generateThumbnailsAsync([0.2], { maxWidth: 720 });
+    const [thumbnail] = await player.generateThumbnailsAsync([POSTER_TIME], { maxWidth: POSTER_MAX_WIDTH });
     return thumbnail ?? null;
   } finally {
     player.release();
@@ -78,15 +87,88 @@ async function extractPoster(url: string): Promise<VideoThumbnail | null> {
 }
 
 /**
- * A still frame from the video, once it has been extracted. Returns `null` on
- * web (expo-video throws there) and whenever the file refuses to give one up —
- * callers fall back to a plain surface.
+ * The web has no `generateThumbnailsAsync` — expo-video throws there. A frame
+ * still exists, it just has to be taken the browser way: load the video, seek,
+ * paint it onto a canvas.
+ *
+ * Two ways this quietly gives up, both ending on the plain play button rather
+ * than on an error: a video the browser cannot decode, and a storage host that
+ * does not allow cross-origin reads, which taints the canvas and makes
+ * `toDataURL` throw.
  */
-export function useVideoPoster(url: string | null): VideoThumbnail | null {
-  const [poster, setPoster] = useState<VideoThumbnail | null>(() => (url ? posterCache.get(url) ?? null : null));
+async function extractPosterWeb(url: string): Promise<Poster | null> {
+  return new Promise<Poster | null>((resolve) => {
+    const video = document.createElement("video");
+    let settled = false;
+
+    const finish = (poster: Poster | null) => {
+      if (settled) return;
+      settled = true;
+      // Release the decoder rather than leave one per clip attached to the page.
+      video.removeAttribute("src");
+      video.load();
+      resolve(poster);
+    };
+
+    // Needed for a readable canvas; without it the drawn frame is unreadable.
+    video.crossOrigin = "anonymous";
+    video.preload = "metadata";
+    video.muted = true;
+    video.playsInline = true;
+
+    video.addEventListener("error", () => finish(null), { once: true });
+    video.addEventListener(
+      "loadeddata",
+      () => {
+        const duration = Number.isFinite(video.duration) ? video.duration : 1;
+        video.currentTime = Math.min(POSTER_TIME, duration / 2);
+      },
+      { once: true },
+    );
+    video.addEventListener(
+      "seeked",
+      () => {
+        try {
+          const width = video.videoWidth;
+          const height = video.videoHeight;
+          if (!width || !height) return finish(null);
+
+          const scale = Math.min(1, POSTER_MAX_WIDTH / width);
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.round(width * scale);
+          canvas.height = Math.round(height * scale);
+          const context = canvas.getContext("2d");
+          if (!context) return finish(null);
+
+          context.drawImage(video, 0, 0, canvas.width, canvas.height);
+          finish(canvas.toDataURL("image/jpeg", 0.7));
+        } catch {
+          finish(null);
+        }
+      },
+      { once: true },
+    );
+
+    // A video that never fires an event must not hold up the queue behind it.
+    setTimeout(() => finish(null), 8000);
+    video.src = url;
+  });
+}
+
+function extractPoster(url: string): Promise<Poster | null> {
+  return Platform.OS === "web" ? extractPosterWeb(url) : extractPosterNative(url);
+}
+
+/**
+ * A still frame from the video, once it has been extracted. Returns `null`
+ * whenever the file refuses to give one up — callers fall back to a plain
+ * surface with a play button.
+ */
+export function useVideoPoster(url: string | null): Poster | null {
+  const [poster, setPoster] = useState<Poster | null>(() => (url ? posterCache.get(url) ?? null : null));
 
   useEffect(() => {
-    if (!url || Platform.OS === "web") return;
+    if (!url) return;
     if (posterCache.has(url)) {
       setPoster(posterCache.get(url) ?? null);
       return;

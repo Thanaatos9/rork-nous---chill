@@ -40,7 +40,12 @@ export function useComments(episodeId: string) {
   });
 }
 
-export function useAddComment(episodeId: string) {
+/**
+ * `space_id` is NOT NULL on `episode_comments` even though it is derivable from
+ * the episode — same shape as `reviews`. Sending it is the caller's job here,
+ * and a trigger fills it in for anyone who forgets (20260802020000).
+ */
+export function useAddComment(episodeId: string, spaceId?: string | null) {
   const { userId } = useAuth();
   const queryClient = useQueryClient();
   return useMutation({
@@ -49,7 +54,7 @@ export function useAddComment(episodeId: string) {
       if (!trimmed) throw new Error("Le commentaire est vide.");
       const { error } = await supabase
         .from("episode_comments")
-        .insert({ episode_id: episodeId, author_id: userId, body: trimmed });
+        .insert({ episode_id: episodeId, author_id: userId, space_id: spaceId || null, body: trimmed });
       if (error) throw error;
     },
     onSuccess: () => {
