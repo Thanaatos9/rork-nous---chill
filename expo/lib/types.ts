@@ -104,8 +104,15 @@ export interface EpisodeComment {
   author_id: string;
   body: string;
   created_at: string;
+  /** The comment this one answers. Threads are one level deep — a reply to a
+   *  reply is flattened onto the same root, by the database. */
+  parent_id?: string | null;
+  /** Ids of the people named with "@" in the body (see lib/mentions.ts). */
+  mentions?: string[] | null;
   profile?: Profile | null;
   reactions?: CommentReaction[];
+  /** Attached client-side, oldest first. Only roots carry replies. */
+  replies?: EpisodeComment[];
 }
 
 export interface CommentReaction {

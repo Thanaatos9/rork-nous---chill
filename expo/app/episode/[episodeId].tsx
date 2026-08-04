@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   ChevronLeft,
   Clock,
+  CornerDownRight,
   Heart,
   Hourglass,
   ImagePlus,
@@ -16,6 +17,7 @@ import {
   SmilePlus,
   Sparkles,
   Trash2,
+  X,
 } from "lucide-react-native";
 import React, { useMemo, useState } from "react";
 import { Alert, ScrollView, TextInput, TouchableOpacity, View } from "react-native";
@@ -24,7 +26,7 @@ import { CoverAdjustModal } from "@/components/CoverAdjustModal";
 import { MediaGallery, MediaGrid } from "@/components/MediaGallery";
 import { RatingStars } from "@/components/RatingStars";
 import { Avatar } from "@/components/ui/Avatar";
-import { Badge } from "@/components/ui/Badge";
+import { Badge, RoleBadge } from "@/components/ui/Badge";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Card, Divider, SectionHeader } from "@/components/ui/Card";
 import { Loader } from "@/components/ui/Feedback";
@@ -35,7 +37,25 @@ import { colors, radius, spacing } from "@/constants/theme";
 import { friendlyError } from "@/lib/errors";
 import { formatDate, formatDuration, formatRelative, normalizeTags } from "@/lib/format";
 import { pickCoverImage, pickFromLibrary, type PickedAsset } from "@/lib/media";
-import { canParticipate, effectiveRole, isOwner, type EpisodeComment, type EpisodeMedia, type Review, type SpaceMember } from "@/lib/types";
+import {
+  applyMention,
+  matchMentions,
+  mentionQuery,
+  mentionedIds,
+  splitMentions,
+  type MentionCandidate,
+} from "@/lib/mentions";
+import {
+  canParticipate,
+  effectiveRole,
+  isOwner,
+  type EpisodeComment,
+  type EpisodeMedia,
+  type MemberRole,
+  type Profile,
+  type Review,
+  type SpaceMember,
+} from "@/lib/types";
 import {
   useAddEpisodeMedia,
   useDeleteEpisode,
@@ -53,6 +73,9 @@ import { useAuth } from "@/providers/auth";
 import { useToast } from "@/providers/toast";
 
 const REACTION_EMOJIS = ["❤️", "😂", "😮", "🔥", "🥹", "👏"];
+
+/** A member as the "@" list shows them: a name to insert, a face, a role. */
+type MemberCandidate = MentionCandidate & { profile: Profile | null; role: MemberRole };
 
 function ReviewContentRows({ review }: { review: Review }) {
   const rows: { label: string; value: string | null; icon?: React.ReactNode }[] = [
@@ -83,18 +106,49 @@ function ReviewContentRows({ review }: { review: Review }) {
   );
 }
 
+/**
+ * A comment body with its "@quelqu'un" picked out of the sentence. The names
+ * come from the space's members, so a stray "@quelquechose" stays plain text
+ * instead of pretending to be somebody.
+ */
+function CommentBody({ body, people }: { body: string; people: MentionCandidate[] }) {
+  const parts = useMemo(() => splitMentions(body, people), [body, people]);
+  return (
+    <AppText variant="body">
+      {parts.map((part, i) =>
+        part.mention ? (
+          <AppText key={i} style={{ color: colors.primary, fontWeight: "700" }}>
+            {part.text}
+          </AppText>
+        ) : (
+          part.text
+        )
+      )}
+    </AppText>
+  );
+}
+
 function CommentItem({
   comment,
+  rootId,
   meId,
-  canDelete,
+  people,
+  canReply,
+  isReply = false,
   onReact,
   onDelete,
+  onReply,
 }: {
   comment: EpisodeComment;
+  /** The comment a "Répondre" here should hang under: threads stay one deep. */
+  rootId: string;
   meId: string | null;
-  canDelete: boolean;
-  onReact: (emoji: string, active: boolean) => void;
-  onDelete: () => void;
+  people: MentionCandidate[];
+  canReply: boolean;
+  isReply?: boolean;
+  onReact: (commentId: string, emoji: string, active: boolean) => void;
+  onDelete: (commentId: string) => void;
+  onReply: (rootId: string, authorName: string) => void;
 }) {
   const grouped = useMemo(() => {
     const map: Record<string, { count: number; mine: boolean }> = {};
@@ -107,63 +161,103 @@ function CommentItem({
   }, [comment.reactions, meId]);
 
   const [showPicker, setShowPicker] = useState<boolean>(false);
+  const authorName = comment.profile?.name ?? "Membre";
+  const canDelete = comment.author_id === meId;
+  const replies = comment.replies ?? [];
 
   return (
-    <View style={{ flexDirection: "row", gap: spacing.md }}>
-      <Avatar profile={comment.profile} size={36} />
-      <View style={{ flex: 1, gap: 6 }}>
-        <View style={{ backgroundColor: colors.card, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: spacing.md, gap: 3 }}>
-          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-            <AppText style={{ fontWeight: "700", fontSize: 13.5, color: colors.text }}>{comment.profile?.name ?? "Membre"}</AppText>
-            <AppText variant="caption">{formatRelative(comment.created_at)}</AppText>
+    <View style={{ gap: spacing.md }}>
+      <View style={{ flexDirection: "row", gap: spacing.md }}>
+        <Avatar profile={comment.profile} size={isReply ? 28 : 36} />
+        <View style={{ flex: 1, gap: 6 }}>
+          <View style={{ backgroundColor: colors.card, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: spacing.md, gap: 3 }}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+              <AppText style={{ fontWeight: "700", fontSize: 13.5, color: colors.text }}>{authorName}</AppText>
+              <AppText variant="caption">{formatRelative(comment.created_at)}</AppText>
+            </View>
+            <CommentBody body={comment.body} people={people} />
           </View>
-          <AppText variant="body">{comment.body}</AppText>
-        </View>
 
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-          {Object.entries(grouped).map(([emoji, info]) => (
-            <PressableScale key={emoji} onPress={() => onReact(emoji, info.mine)} withHaptic style={{ flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 9, paddingVertical: 4, borderRadius: radius.pill, backgroundColor: info.mine ? colors.primarySoft : colors.surface, borderWidth: info.mine ? 1 : 0, borderColor: colors.primary }}>
-              <AppText style={{ fontSize: 13 }}>{emoji}</AppText>
-              <AppText style={{ fontSize: 12, fontWeight: "700", color: info.mine ? colors.primary : colors.textMuted }}>{info.count}</AppText>
-            </PressableScale>
-          ))}
-          {/* A smiley rather than a bare "+": the plus said "add something", the
-              face says what. Same faint grey as before — it stays an aside next
-              to the reactions people actually left. */}
-          <TouchableOpacity
-            onPress={() => setShowPicker((v) => !v)}
-            hitSlop={8}
-            style={{ paddingHorizontal: 8, paddingVertical: 4 }}
-            accessibilityRole="button"
-            accessibilityLabel="Ajouter une réaction"
-            accessibilityState={{ expanded: showPicker }}
-          >
-            <SmilePlus size={16} color={colors.textFaint} />
-          </TouchableOpacity>
-          {canDelete ? (
-            <TouchableOpacity onPress={onDelete} hitSlop={8} style={{ paddingHorizontal: 4, paddingVertical: 4 }}>
-              <Trash2 size={14} color={colors.textFaint} />
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            {Object.entries(grouped).map(([emoji, info]) => (
+              <PressableScale key={emoji} onPress={() => onReact(comment.id, emoji, info.mine)} withHaptic style={{ flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 9, paddingVertical: 4, borderRadius: radius.pill, backgroundColor: info.mine ? colors.primarySoft : colors.surface, borderWidth: info.mine ? 1 : 0, borderColor: colors.primary }}>
+                <AppText style={{ fontSize: 13 }}>{emoji}</AppText>
+                <AppText style={{ fontSize: 12, fontWeight: "700", color: info.mine ? colors.primary : colors.textMuted }}>{info.count}</AppText>
+              </PressableScale>
+            ))}
+            {/* A smiley rather than a bare "+": the plus said "add something", the
+                face says what. Same faint grey as before — it stays an aside next
+                to the reactions people actually left. */}
+            <TouchableOpacity
+              onPress={() => setShowPicker((v) => !v)}
+              hitSlop={8}
+              style={{ paddingHorizontal: 8, paddingVertical: 4 }}
+              accessibilityRole="button"
+              accessibilityLabel="Ajouter une réaction"
+              accessibilityState={{ expanded: showPicker }}
+            >
+              <SmilePlus size={16} color={colors.textFaint} />
             </TouchableOpacity>
+            {canReply ? (
+              <TouchableOpacity
+                onPress={() => onReply(rootId, authorName)}
+                hitSlop={8}
+                style={{ flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 4, paddingVertical: 4 }}
+                accessibilityRole="button"
+                accessibilityLabel={`Répondre à ${authorName}`}
+              >
+                <CornerDownRight size={13} color={colors.textFaint} />
+                <AppText style={{ fontSize: 12, fontWeight: "700", color: colors.textMuted }}>Répondre</AppText>
+              </TouchableOpacity>
+            ) : null}
+            {canDelete ? (
+              <TouchableOpacity onPress={() => onDelete(comment.id)} hitSlop={8} style={{ paddingHorizontal: 4, paddingVertical: 4 }}>
+                <Trash2 size={14} color={colors.textFaint} />
+              </TouchableOpacity>
+            ) : null}
+          </View>
+
+          {showPicker ? (
+            <View style={{ flexDirection: "row", gap: 4, backgroundColor: colors.cardElevated, borderRadius: radius.pill, padding: 6, alignSelf: "flex-start", borderWidth: 1, borderColor: colors.border }}>
+              {REACTION_EMOJIS.map((emoji) => (
+                <TouchableOpacity
+                  key={emoji}
+                  onPress={() => {
+                    onReact(comment.id, emoji, grouped[emoji]?.mine ?? false);
+                    setShowPicker(false);
+                  }}
+                  style={{ padding: 4 }}
+                >
+                  <AppText style={{ fontSize: 19 }}>{emoji}</AppText>
+                </TouchableOpacity>
+              ))}
+            </View>
           ) : null}
         </View>
-
-        {showPicker ? (
-          <View style={{ flexDirection: "row", gap: 4, backgroundColor: colors.cardElevated, borderRadius: radius.pill, padding: 6, alignSelf: "flex-start", borderWidth: 1, borderColor: colors.border }}>
-            {REACTION_EMOJIS.map((emoji) => (
-              <TouchableOpacity
-                key={emoji}
-                onPress={() => {
-                  onReact(emoji, grouped[emoji]?.mine ?? false);
-                  setShowPicker(false);
-                }}
-                style={{ padding: 4 }}
-              >
-                <AppText style={{ fontSize: 19 }}>{emoji}</AppText>
-              </TouchableOpacity>
-            ))}
-          </View>
-        ) : null}
       </View>
+
+      {/* Answers, indented under the comment they answer. The rail on the left
+          is what carries the nesting — a second one under it would only make
+          the conversation narrower with every reply, so replies to a reply go
+          back onto this same level. */}
+      {replies.length > 0 ? (
+        <View style={{ marginLeft: 18, paddingLeft: spacing.md, borderLeftWidth: 1, borderLeftColor: colors.border, gap: spacing.md }}>
+          {replies.map((reply) => (
+            <CommentItem
+              key={reply.id}
+              comment={reply}
+              rootId={rootId}
+              meId={meId}
+              people={people}
+              canReply={canReply}
+              isReply
+              onReact={onReact}
+              onDelete={onDelete}
+              onReply={onReply}
+            />
+          ))}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -197,6 +291,11 @@ export default function EpisodeDetailScreen() {
 
   const [pendingCover, setPendingCover] = useState<PickedAsset | null>(null);
   const [draft, setDraft] = useState<string>("");
+  // Where the caret is, tracked because the "@" picker reads the word just
+  // before it. onSelectionChange lands a render after onChangeText, so the
+  // estimate is kept in step by hand as the text changes.
+  const [caret, setCaret] = useState<number>(0);
+  const [replyTo, setReplyTo] = useState<{ rootId: string; name: string } | null>(null);
   // The composer sits in the page scroll, so it can grow with the comment
   // rather than trapping a long one behind an inner scrollbar.
   const draftGrow = useAutoGrow({ enabled: true, value: draft, minHeight: 47, extraHeight: 3 });
@@ -224,6 +323,38 @@ export default function EpisodeDetailScreen() {
   const pendingCount = useMemo(
     () => reviewers.filter((m) => !answeredIds.has(m.user_id)).length,
     [reviewers, answeredIds]
+  );
+
+  /**
+   * Everybody in the space can be named with "@" — observers included. They read
+   * the whole thread and are part of the group; being unmentionable would make
+   * them invisible in a conversation they are watching. Whether they may *write*
+   * is a separate rule, enforced elsewhere.
+   */
+  const people: MemberCandidate[] = useMemo(
+    () =>
+      (members ?? []).map((m) => ({
+        id: m.user_id,
+        name: m.profile?.name?.trim() || "Membre",
+        profile: m.profile ?? null,
+        role: effectiveRole(m),
+      })),
+    [members]
+  );
+  // Yourself excluded from the picker only: your own name still highlights when
+  // somebody else writes it.
+  const mentionables = useMemo(() => people.filter((p) => p.id !== userId), [people, userId]);
+
+  // The header counts the conversation, not the number of threads in it.
+  const commentCount = useMemo(
+    () => (comments ?? []).reduce((total, c) => total + 1 + (c.replies?.length ?? 0), 0),
+    [comments]
+  );
+
+  const mentionCtx = useMemo(() => mentionQuery(draft, caret), [draft, caret]);
+  const suggestions = useMemo(
+    () => (mentionCtx ? matchMentions(mentionables, mentionCtx.query) : []),
+    [mentionCtx, mentionables]
   );
 
   if (isLoading || !episode) {
@@ -348,11 +479,69 @@ export default function EpisodeDetailScreen() {
     );
   };
 
+  // The caret moves with the text one render before onSelectionChange says so.
+  const onChangeDraft = (next: string) => {
+    setCaret((c) => (c >= draft.length ? next.length : Math.max(0, c + (next.length - draft.length))));
+    setDraft(next);
+  };
+
+  const chooseMention = (person: MemberCandidate) => {
+    if (!mentionCtx) return;
+    const next = applyMention(draft, mentionCtx.start, caret, person.name);
+    setDraft(next.text);
+    setCaret(next.cursor);
+    draftGrow.ref.current?.focus();
+  };
+
+  /** "Répondre" — the thread stays one level deep, so this always targets the root. */
+  const startReply = (rootId: string, authorName: string) => {
+    setReplyTo({ rootId, name: authorName });
+    // Naming the person is what the reply would open with anyway, and it makes
+    // the mention explicit for anyone reading the thread later. Only when the
+    // box is empty: a draft in progress is the writer's, not ours to rewrite.
+    if (!draft.trim()) {
+      const prefix = `@${authorName} `;
+      setDraft(prefix);
+      setCaret(prefix.length);
+    }
+    draftGrow.ref.current?.focus();
+  };
+
+  const cancelReply = () => setReplyTo(null);
+
+  /**
+   * Deleting a comment takes its answers with it (the foreign key cascades), so
+   * a thread is never removed without saying how much of it goes. A lone
+   * comment still goes in one tap.
+   */
+  const confirmDeleteComment = (commentId: string) => {
+    const replyCount = (comments ?? []).find((c) => c.id === commentId)?.replies?.length ?? 0;
+    if (replyCount === 0) {
+      deleteComment.mutate(commentId);
+      return;
+    }
+    Alert.alert(
+      "Supprimer ce commentaire ?",
+      `Ses ${replyCount} réponse${replyCount > 1 ? "s" : ""} seront supprimée${replyCount > 1 ? "s" : ""} avec lui.`,
+      [
+        { text: "Annuler", style: "cancel" },
+        { text: "Supprimer", style: "destructive", onPress: () => deleteComment.mutate(commentId) },
+      ]
+    );
+  };
+
   const onSendComment = async () => {
-    if (!draft.trim()) return;
+    const body = draft.trim();
+    if (!body) return;
     try {
-      await addComment.mutateAsync(draft);
+      await addComment.mutateAsync({
+        body,
+        parentId: replyTo?.rootId ?? null,
+        mentions: mentionedIds(body, people),
+      });
       setDraft("");
+      setCaret(0);
+      setReplyTo(null);
     } catch (e) {
       toast.error(friendlyError(e));
     }
@@ -584,17 +773,20 @@ export default function EpisodeDetailScreen() {
 
           {/* Comments */}
           <View style={{ gap: spacing.lg }}>
-            <SectionHeader title={`Commentaires${comments && comments.length > 0 ? ` · ${comments.length}` : ""}`} />
+            <SectionHeader title={`Commentaires${commentCount > 0 ? ` · ${commentCount}` : ""}`} />
 
             {comments && comments.length > 0 ? (
               comments.map((c) => (
                 <CommentItem
                   key={c.id}
                   comment={c}
+                  rootId={c.id}
                   meId={userId}
-                  canDelete={c.author_id === userId}
-                  onReact={(emoji, active) => toggleReaction.mutate({ commentId: c.id, emoji, active })}
-                  onDelete={() => deleteComment.mutate(c.id)}
+                  people={people}
+                  canReply={canComment}
+                  onReact={(commentId, emoji, active) => toggleReaction.mutate({ commentId, emoji, active })}
+                  onDelete={confirmDeleteComment}
+                  onReply={startReply}
                 />
               ))
             ) : (
@@ -602,21 +794,76 @@ export default function EpisodeDetailScreen() {
             )}
 
             {canComment ? (
-              <View style={{ flexDirection: "row", alignItems: "flex-end", gap: spacing.sm, marginTop: spacing.sm }}>
-                <TextInput
-                  ref={draftGrow.ref}
-                  value={draft}
-                  onChangeText={setDraft}
-                  placeholder="Ajouter un commentaire…"
-                  placeholderTextColor={colors.textFaint}
-                  onSubmitEditing={onSendComment}
-                  onContentSizeChange={draftGrow.onContentSizeChange}
-                  returnKeyType="send"
-                  multiline
-                  textAlignVertical="top"
-                  style={{ flex: 1, color: colors.text, fontSize: 15, backgroundColor: colors.bgElevated, borderRadius: radius.xl, borderWidth: 1.5, borderColor: colors.border, paddingHorizontal: spacing.lg, paddingTop: 12, paddingBottom: 12, minHeight: draftGrow.minHeight, height: draftGrow.height }}
-                />
-                <IconButton icon={<Send size={18} color={colors.primaryFg} />} variant="primary" onPress={onSendComment} accessibilityLabel="Envoyer le commentaire" />
+              <View style={{ marginTop: spacing.sm }}>
+                {replyTo ? (
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: colors.surface, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: 8, marginBottom: spacing.sm }}>
+                    <CornerDownRight size={14} color={colors.primary} />
+                    <AppText variant="caption" style={{ flex: 1 }}>
+                      Réponse à {replyTo.name}
+                    </AppText>
+                    <TouchableOpacity onPress={cancelReply} hitSlop={10} accessibilityRole="button" accessibilityLabel="Annuler la réponse">
+                      <X size={14} color={colors.textMuted} />
+                    </TouchableOpacity>
+                  </View>
+                ) : null}
+
+                {/* The composer and its floating "@" list share this box so the
+                    list can sit exactly on top of the input, whatever height the
+                    text has grown to. */}
+                <View>
+                  {suggestions.length > 0 ? (
+                    <View
+                      style={{
+                        position: "absolute",
+                        left: 0,
+                        right: 0,
+                        bottom: "100%",
+                        marginBottom: 8,
+                        zIndex: 30,
+                        elevation: 12,
+                        backgroundColor: colors.cardElevated,
+                        borderRadius: radius.lg,
+                        borderWidth: 1,
+                        borderColor: colors.borderStrong,
+                        overflow: "hidden",
+                      }}
+                    >
+                      {suggestions.map((person, i) => (
+                        <TouchableOpacity
+                          key={person.id}
+                          onPress={() => chooseMention(person)}
+                          style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: 9, borderTopWidth: i === 0 ? 0 : 1, borderTopColor: colors.border }}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Mentionner ${person.name}`}
+                        >
+                          <Avatar profile={person.profile} size={26} />
+                          <AppText style={{ flex: 1, fontSize: 14, fontWeight: "600", color: colors.text }} numberOfLines={1}>
+                            {person.name}
+                          </AppText>
+                          <RoleBadge role={person.role} />
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  ) : null}
+
+                  <View style={{ flexDirection: "row", alignItems: "flex-end", gap: spacing.sm }}>
+                    <TextInput
+                      ref={draftGrow.ref}
+                      value={draft}
+                      onChangeText={onChangeDraft}
+                      onSelectionChange={(e) => setCaret(e.nativeEvent.selection.end)}
+                      placeholder={replyTo ? `Répondre à ${replyTo.name}…` : "Ajouter un commentaire… (@ pour mentionner)"}
+                      placeholderTextColor={colors.textFaint}
+                      onSubmitEditing={onSendComment}
+                      onContentSizeChange={draftGrow.onContentSizeChange}
+                      returnKeyType="send"
+                      multiline
+                      textAlignVertical="top"
+                      style={{ flex: 1, color: colors.text, fontSize: 15, backgroundColor: colors.bgElevated, borderRadius: radius.xl, borderWidth: 1.5, borderColor: replyTo ? colors.primary : colors.border, paddingHorizontal: spacing.lg, paddingTop: 12, paddingBottom: 12, minHeight: draftGrow.minHeight, height: draftGrow.height }}
+                    />
+                    <IconButton icon={<Send size={18} color={colors.primaryFg} />} variant="primary" onPress={onSendComment} accessibilityLabel="Envoyer le commentaire" />
+                  </View>
+                </View>
               </View>
             ) : isObserver ? (
               <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: spacing.sm }}>

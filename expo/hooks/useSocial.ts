@@ -31,11 +31,25 @@ export function useComments(episodeId: string) {
       }
 
       const profiles = await getProfilesMap(comments.map((c) => c.author_id));
-      return comments.map((c) => ({
+      const hydrated = comments.map((c) => ({
         ...c,
         profile: profiles[c.author_id] ?? null,
         reactions: reactions.filter((r) => r.comment_id === c.id),
+        replies: [] as EpisodeComment[],
       }));
+
+      /* One level deep, like every comment thread people already know: roots in
+         chronological order, each answer under the comment it answers. A reply
+         whose parent is gone (deleted between the two reads) is shown as a root
+         rather than dropped — the words were written, they stay. */
+      const byId = new Map(hydrated.map((c) => [c.id, c]));
+      const roots: EpisodeComment[] = [];
+      for (const comment of hydrated) {
+        const parent = comment.parent_id ? byId.get(comment.parent_id) : undefined;
+        if (parent && parent.id !== comment.id) parent.replies?.push(comment);
+        else roots.push(comment);
+      }
+      return roots;
     },
   });
 }
@@ -45,16 +59,30 @@ export function useComments(episodeId: string) {
  * the episode — same shape as `reviews`. Sending it is the caller's job here,
  * and a trigger fills it in for anyone who forgets (20260802020000).
  */
+export interface NewComment {
+  body: string;
+  /** The comment being answered, if any. Nesting deeper than one level is
+   *  flattened onto the root by the database — see 20260803010000. */
+  parentId?: string | null;
+  /** Ids named with "@" in the body; the database notifies them. */
+  mentions?: string[];
+}
+
 export function useAddComment(episodeId: string, spaceId?: string | null) {
   const { userId } = useAuth();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (body: string): Promise<void> => {
+    mutationFn: async ({ body, parentId, mentions }: NewComment): Promise<void> => {
       const trimmed = body.trim();
       if (!trimmed) throw new Error("Le commentaire est vide.");
-      const { error } = await supabase
-        .from("episode_comments")
-        .insert({ episode_id: episodeId, author_id: userId, space_id: spaceId || null, body: trimmed });
+      const { error } = await supabase.from("episode_comments").insert({
+        episode_id: episodeId,
+        author_id: userId,
+        space_id: spaceId || null,
+        body: trimmed,
+        parent_id: parentId || null,
+        mentions: mentions && mentions.length > 0 ? mentions : [],
+      });
       if (error) throw error;
     },
     onSuccess: () => {
