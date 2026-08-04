@@ -5,7 +5,6 @@ import { Clapperboard, LayoutGrid, Lightbulb, Lock, Plus, Rows3, Settings, Spark
 import React, { useState } from "react";
 import { Dimensions, RefreshControl, View } from "react-native";
 import { EpisodePoster, EpisodeRow } from "@/components/EpisodeCard";
-import { ObserverNotice, PendingObserversNotice } from "@/components/ObserverNotice";
 import { SpaceSwitcher } from "@/components/SpaceSwitcher";
 import { Badge } from "@/components/ui/Badge";
 import { Button, IconButton } from "@/components/ui/Button";
@@ -15,7 +14,7 @@ import { FadeIn, PressableScale, Pulse } from "@/components/ui/motion";
 import { AppText } from "@/components/ui/Text";
 import { colors, radius, shadows, spacing } from "@/constants/theme";
 import { formatDate, getSeasonStatus } from "@/lib/format";
-import { canParticipate, effectiveRole, isOwner } from "@/lib/types";
+import { canParticipate, isOwner } from "@/lib/types";
 import { useEpisodes } from "@/hooks/useEpisodes";
 import { useMembers } from "@/hooks/useMembers";
 import { useIdeas } from "@/hooks/useSocial";
@@ -107,11 +106,6 @@ export default function MomentsScreen() {
   const status = getSeasonStatus(space);
   const owner = isOwner(space.membership);
   const participate = canParticipate(space.membership);
-  const isObserver = effectiveRole(space.membership) === "observer";
-  const ownerName = (members ?? []).find((m) => m.role === "owner")?.profile?.name ?? null;
-  const pendingObservers = owner
-    ? (members ?? []).filter((m) => m.role !== "owner" && effectiveRole(m) === "observer").length
-    : 0;
 
   const openEpisode = (episodeId: string) => router.push({ pathname: "/episode/[episodeId]", params: { episodeId } });
   const create = () => router.push({ pathname: "/create-episode/[spaceId]", params: { spaceId } });
@@ -160,25 +154,6 @@ export default function MomentsScreen() {
           </View>
         </View>
       </FadeIn>
-
-      {isObserver ? (
-        <FadeIn>
-          <View style={{ marginTop: spacing.xl }}>
-            <ObserverNotice ownerName={ownerName} />
-          </View>
-        </FadeIn>
-      ) : null}
-
-      {pendingObservers > 0 ? (
-        <FadeIn>
-          <View style={{ marginTop: spacing.xl }}>
-            <PendingObserversNotice
-              count={pendingObservers}
-              onManage={() => router.push({ pathname: "/space-members/[spaceId]", params: { spaceId } })}
-            />
-          </View>
-        </FadeIn>
-      ) : null}
 
       {/* Season */}
       <FadeIn delay={60}>
