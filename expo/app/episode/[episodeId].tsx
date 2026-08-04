@@ -13,6 +13,7 @@ import {
   Music,
   PenLine,
   Send,
+  SmilePlus,
   Sparkles,
   Trash2,
 } from "lucide-react-native";
@@ -126,8 +127,18 @@ function CommentItem({
               <AppText style={{ fontSize: 12, fontWeight: "700", color: info.mine ? colors.primary : colors.textMuted }}>{info.count}</AppText>
             </PressableScale>
           ))}
-          <TouchableOpacity onPress={() => setShowPicker((v) => !v)} hitSlop={8} style={{ paddingHorizontal: 8, paddingVertical: 4 }}>
-            <AppText style={{ fontSize: 15, color: colors.textFaint }}>＋</AppText>
+          {/* A smiley rather than a bare "+": the plus said "add something", the
+              face says what. Same faint grey as before — it stays an aside next
+              to the reactions people actually left. */}
+          <TouchableOpacity
+            onPress={() => setShowPicker((v) => !v)}
+            hitSlop={8}
+            style={{ paddingHorizontal: 8, paddingVertical: 4 }}
+            accessibilityRole="button"
+            accessibilityLabel="Ajouter une réaction"
+            accessibilityState={{ expanded: showPicker }}
+          >
+            <SmilePlus size={16} color={colors.textFaint} />
           </TouchableOpacity>
           {canDelete ? (
             <TouchableOpacity onPress={onDelete} hitSlop={8} style={{ paddingHorizontal: 4, paddingVertical: 4 }}>
