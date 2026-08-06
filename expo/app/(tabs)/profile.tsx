@@ -1,6 +1,6 @@
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
-import { Bell, Camera, ChevronRight, GraduationCap, Info, LogOut, Moon, Palette, Smartphone, Sun, Users } from "lucide-react-native";
+import { Bell, Camera, ChevronRight, GraduationCap, Info, LogOut, Moon, Palette, Smartphone, Sun, Sunset, Users } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import { Alert, Platform, Switch, TouchableOpacity, View } from "react-native";
 import { CoverAdjustModal } from "@/components/CoverAdjustModal";
@@ -117,6 +117,61 @@ function PushToggle() {
         thumbColor="#fff"
         ios_backgroundColor={colors.surface}
         accessibilityLabel="Activer les notifications push"
+      />
+    </View>
+  );
+}
+
+/**
+ * The 8pm reminder, and its own switch.
+ *
+ * It is the only notification the app sends without anybody having done
+ * anything — so it is the only one that needs to be refusable on its own.
+ * Turning push off to escape it would also silence the replies to your own
+ * comments, which is not what somebody means by "leave me alone at 8pm".
+ */
+function DailyPromptToggle() {
+  const toast = useToast();
+  const { profile } = useAuth();
+  const updateProfile = useUpdateProfile();
+
+  // The switch has to move under the thumb, not a round-trip later: `pending`
+  // holds the value being written until the profile comes back saying so.
+  const [pending, setPending] = useState<boolean | null>(null);
+  // Undefined means a database that predates the column — on, like everyone.
+  const enabled = pending ?? profile?.daily_prompt_enabled !== false;
+
+  useEffect(() => {
+    if (pending !== null && profile?.daily_prompt_enabled === pending) setPending(null);
+  }, [profile?.daily_prompt_enabled, pending]);
+
+  const onToggle = async (value: boolean) => {
+    setPending(value);
+    try {
+      await updateProfile.mutateAsync({ daily_prompt_enabled: value });
+      toast.success(value ? "Tu seras relancé à 20h" : "Plus de relance le soir");
+    } catch (e) {
+      setPending(null);
+      toast.error(friendlyError(e));
+    }
+  };
+
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.md }}>
+      <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" }}>
+        <Sunset size={18} color={colors.text} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <AppText style={{ fontWeight: "600", fontSize: 15, color: colors.text }}>Relance du soir</AppText>
+        <AppText variant="caption">À 20h, « quelque chose à raconter aujourd&apos;hui ? »</AppText>
+      </View>
+      <Switch
+        value={enabled}
+        onValueChange={onToggle}
+        trackColor={{ false: colors.surface, true: colors.primary }}
+        thumbColor="#fff"
+        ios_backgroundColor={colors.surface}
+        accessibilityLabel="Recevoir la relance du soir"
       />
     </View>
   );
@@ -325,6 +380,8 @@ export default function ProfileScreen() {
           <ThemeSelector />
           <Divider />
           <PushToggle />
+          <Divider />
+          <DailyPromptToggle />
         </Card>
       </View>
 

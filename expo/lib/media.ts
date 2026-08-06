@@ -156,8 +156,19 @@ async function readAssetBytes(uri: string): Promise<ArrayBuffer> {
  * it wider than a screen. Shrinking first makes the upload far more likely to
  * succeed on mobile data — and keeps the base64 fallback path from holding a
  * huge string in memory.
+ *
+ * 1600px is the largest thing anyone sees: the fullscreen viewer draws with
+ * `contentFit="contain"` at window size and there is no pinch-zoom, so even a
+ * 3x phone in landscape asks for less. Every pixel above that is upload time
+ * paid for nothing — which is why this used to be 2000 and no longer is.
  */
-const MAX_UPLOAD_DIMENSION = 2000;
+const MAX_UPLOAD_DIMENSION = 1600;
+
+/**
+ * JPEG quality for that resize. At 1600px the difference between 0.7 and 0.85
+ * is invisible on a phone and roughly a factor two on the wire.
+ */
+const UPLOAD_COMPRESSION = 0.7;
 
 async function downscaleImage(asset: PickedAsset): Promise<PickedAsset> {
   const longestEdge = Math.max(asset.width ?? 0, asset.height ?? 0);
@@ -168,7 +179,7 @@ async function downscaleImage(asset: PickedAsset): Promise<PickedAsset> {
     const landscape = (asset.width ?? 0) >= (asset.height ?? 0);
     context.resize(landscape ? { width: MAX_UPLOAD_DIMENSION } : { height: MAX_UPLOAD_DIMENSION });
     const rendered = await context.renderAsync();
-    const saved = await rendered.saveAsync({ format: SaveFormat.JPEG, compress: 0.8 });
+    const saved = await rendered.saveAsync({ format: SaveFormat.JPEG, compress: UPLOAD_COMPRESSION });
     try {
       rendered.release?.();
       context.release?.();
@@ -234,15 +245,21 @@ function isPolicyRejection(e: unknown): boolean {
   return /row-level security|invalid input syntax|unauthorized|not allowed|violates|policy|uuid/i.test(msg);
 }
 
+/** `undefined` while the stored value has never been read. */
+let templateMemo: string | null | undefined;
+
 async function readCachedTemplate(): Promise<string | null> {
+  if (templateMemo !== undefined) return templateMemo;
   try {
-    return await AsyncStorage.getItem(TEMPLATE_CACHE_KEY);
+    templateMemo = await AsyncStorage.getItem(TEMPLATE_CACHE_KEY);
   } catch {
-    return null;
+    templateMemo = null;
   }
+  return templateMemo;
 }
 
 function writeCachedTemplate(template: string): void {
+  templateMemo = template;
   AsyncStorage.setItem(TEMPLATE_CACHE_KEY, template).catch(() => {});
 }
 
@@ -305,4 +322,62 @@ export async function uploadMedia(ctx: UploadContext, asset: PickedAsset): Promi
 
   console.log("[media] upload failed on every candidate:", lastError);
   throw new Error("Le stockage a refusé l'envoi du fichier. Réessaie — et si ça persiste, dis-le nous.");
+}
+
+export interface UploadOutcome {
+  asset: PickedAsset;
+  /** The displayable URL, or null when this one file could not be sent. */
+  url: string | null;
+  error?: unknown;
+}
+
+/**
+ * How many files travel at once. Uploading a review's photos one after the
+ * other spends most of its time waiting on a round trip that is not using the
+ * connection — three in flight fills it without starving the UI thread or
+ * making a weak network drop everything at once.
+ */
+const UPLOAD_CONCURRENCY = 3;
+
+/**
+ * Uploads several picked assets and reports each one separately, in the order
+ * they were given. Never throws: one unsendable file must not discard the ones
+ * that went through, so failures come back as `url: null`.
+ */
+export async function uploadMediaAll(
+  ctx: UploadContext,
+  assets: PickedAsset[],
+  concurrency: number = UPLOAD_CONCURRENCY,
+): Promise<UploadOutcome[]> {
+  const results: UploadOutcome[] = new Array(assets.length);
+  if (assets.length === 0) return results;
+
+  let next = 0;
+  const run = async (i: number): Promise<void> => {
+    try {
+      results[i] = { asset: assets[i], url: await uploadMedia(ctx, assets[i]) };
+    } catch (e) {
+      console.log("[media] media upload failed:", e);
+      results[i] = { asset: assets[i], url: null, error: e };
+    }
+  };
+
+  // Nothing cached yet means the first upload has to discover which path the
+  // storage rules accept, probing up to six of them. Letting it do that alone
+  // costs one file's latency; letting three do it at once costs three times the
+  // probing.
+  if ((await readCachedTemplate()) === null) {
+    await run(0);
+    next = 1;
+  }
+
+  const worker = async (): Promise<void> => {
+    for (let i = next++; i < assets.length; i = next++) {
+      await run(i);
+    }
+  };
+  const lanes = Math.max(0, Math.min(concurrency, assets.length - next));
+  await Promise.all(Array.from({ length: lanes }, worker));
+
+  return results;
 }

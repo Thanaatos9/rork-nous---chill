@@ -9,6 +9,12 @@ export interface Profile {
   bio: string | null;
   created_at: string;
   updated_at: string;
+  /**
+   * Receives the 8pm "anything to tell today?" reminder. Optional here rather
+   * than required: the column arrives with 20260806000000, and a client running
+   * against a database without it yet must read as "on", like everybody else.
+   */
+  daily_prompt_enabled?: boolean;
 }
 
 export interface Space {

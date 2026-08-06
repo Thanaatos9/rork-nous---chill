@@ -8,6 +8,7 @@ interface ProfilePatch {
   name?: string;
   avatar_url?: string | null;
   bio?: string | null;
+  daily_prompt_enabled?: boolean;
 }
 
 export function useUpdateProfile() {

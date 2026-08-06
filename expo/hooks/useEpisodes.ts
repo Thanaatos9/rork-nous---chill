@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { qk } from "@/lib/keys";
-import { PickedAsset, uploadMedia } from "@/lib/media";
+import { PickedAsset, uploadMedia, uploadMediaAll } from "@/lib/media";
 import { supabase } from "@/lib/supabase";
 import type { Episode, EpisodeMedia } from "@/lib/types";
 import { useAuth } from "@/providers/auth";
@@ -132,19 +132,15 @@ export function useCreateEpisode() {
         }
       }
 
+      const outcomes = await uploadMediaAll(
+        { kind: "episodes", spaceId: input.spaceId, userId, episodeId: episode.id },
+        input.assets,
+      );
       const uploaded: { url: string; type: string }[] = [];
       let failedMedia = 0;
-      for (const asset of input.assets) {
-        try {
-          const url = await uploadMedia(
-            { kind: "episodes", spaceId: input.spaceId, userId, episodeId: episode.id },
-            asset,
-          );
-          uploaded.push({ url, type: asset.type });
-        } catch (e) {
-          console.log("[episodes] media upload failed:", e);
-          failedMedia += 1;
-        }
+      for (const outcome of outcomes) {
+        if (outcome.url) uploaded.push({ url: outcome.url, type: outcome.asset.type });
+        else failedMedia += 1;
       }
 
       if (uploaded.length > 0) {
@@ -208,22 +204,22 @@ export function useAddEpisodeMedia(episodeId: string, spaceId: string) {
         uploaded_by: string | null;
       }[] = [];
       let failed = 0;
-      // One unsendable file must not discard the ones that went through.
-      for (const asset of assets) {
-        try {
-          const url = await uploadMedia({ kind: "episodes", spaceId, userId, episodeId }, asset);
-          rows.push({
-            episode_id: episodeId,
-            space_id: spaceId,
-            url,
-            filename: url.split("/").pop() || "media",
-            type: asset.type,
-            uploaded_by: userId,
-          });
-        } catch (e) {
-          console.log("[episodes] media upload failed:", e);
+      // Several at a time, but reported one by one: an unsendable file must not
+      // discard the ones that went through.
+      const outcomes = await uploadMediaAll({ kind: "episodes", spaceId, userId, episodeId }, assets);
+      for (const { asset, url } of outcomes) {
+        if (!url) {
           failed += 1;
+          continue;
         }
+        rows.push({
+          episode_id: episodeId,
+          space_id: spaceId,
+          url,
+          filename: url.split("/").pop() || "media",
+          type: asset.type,
+          uploaded_by: userId,
+        });
       }
       if (rows.length > 0) {
         const { error } = await supabase.from("episode_media").insert(rows);
