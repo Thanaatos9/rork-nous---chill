@@ -26,13 +26,20 @@ function toPicked(asset: ImagePicker.ImagePickerAsset): PickedAsset {
   };
 }
 
-/** Pick one or more photos/videos from the library (compressed at pick time). */
+/**
+ * Pick one or more photos/videos from the library.
+ *
+ * No `quality` is asked for on purpose. Below 1, the picker decodes and
+ * re-encodes every selected file before handing it back — ten photos of that,
+ * before the screen even reappears, for a result `prepareImage` immediately
+ * re-encodes anyway on its way to 1600px. Taking the originals moves the whole
+ * cost to that single pass, which shrinks them far more.
+ */
 export async function pickFromLibrary(multiple = true): Promise<PickedAsset[]> {
   const result = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ["images", "videos"],
     allowsMultipleSelection: multiple,
     selectionLimit: 10,
-    quality: 0.5,
     videoExportPreset: ImagePicker.VideoExportPreset.H264_1280x720,
   });
   if (result.canceled) return [];
@@ -45,7 +52,6 @@ export async function captureWithCamera(): Promise<PickedAsset[]> {
   if (!perm.granted) throw new Error("L'accès à la caméra a été refusé.");
   const result = await ImagePicker.launchCameraAsync({
     mediaTypes: ["images", "videos"],
-    quality: 0.5,
     videoExportPreset: ImagePicker.VideoExportPreset.H264_1280x720,
   });
   if (result.canceled) return [];
@@ -170,14 +176,26 @@ const MAX_UPLOAD_DIMENSION = 1600;
  */
 const UPLOAD_COMPRESSION = 0.7;
 
-async function downscaleImage(asset: PickedAsset): Promise<PickedAsset> {
-  const longestEdge = Math.max(asset.width ?? 0, asset.height ?? 0);
-  if (longestEdge <= MAX_UPLOAD_DIMENSION) return asset;
-
+/**
+ * Brings a picked photo down to what the app actually shows: at most
+ * MAX_UPLOAD_DIMENSION on the longest edge, JPEG at UPLOAD_COMPRESSION.
+ *
+ * It runs even on an image that is already small enough, and that is the point.
+ * The pickers hand back an untouched original — a 1200px PNG screenshot can
+ * weigh more than the 4000px photo next to it — so "already small" says nothing
+ * about the number of bytes. One pass here is also the *only* re-encode in the
+ * whole path, which is why the pickers no longer ask for a compression of their
+ * own: they used to decode and re-encode every selected file before returning,
+ * and this function then threw that work away by encoding it a second time.
+ */
+async function prepareImage(asset: PickedAsset): Promise<PickedAsset> {
   try {
     const context = ImageManipulator.manipulate(asset.uri);
-    const landscape = (asset.width ?? 0) >= (asset.height ?? 0);
-    context.resize(landscape ? { width: MAX_UPLOAD_DIMENSION } : { height: MAX_UPLOAD_DIMENSION });
+    const longestEdge = Math.max(asset.width ?? 0, asset.height ?? 0);
+    if (longestEdge > MAX_UPLOAD_DIMENSION) {
+      const landscape = (asset.width ?? 0) >= (asset.height ?? 0);
+      context.resize(landscape ? { width: MAX_UPLOAD_DIMENSION } : { height: MAX_UPLOAD_DIMENSION });
+    }
     const rendered = await context.renderAsync();
     const saved = await rendered.saveAsync({ format: SaveFormat.JPEG, compress: UPLOAD_COMPRESSION });
     try {
@@ -189,7 +207,7 @@ async function downscaleImage(asset: PickedAsset): Promise<PickedAsset> {
     return { uri: saved.uri, type: "image", mimeType: "image/jpeg", width: saved.width, height: saved.height };
   } catch (e) {
     // Never block an upload on the resize step.
-    console.log("[media] downscale failed, sending the original:", e);
+    console.log("[media] image preparation failed, sending the original:", e);
     return asset;
   }
 }
@@ -280,7 +298,7 @@ async function uploadBytes(folder: string, bytes: ArrayBuffer, mimeType: string,
  * avatars keep working even if the storage rules refuse every path.
  */
 export async function uploadMedia(ctx: UploadContext, asset: PickedAsset): Promise<string> {
-  const source = asset.type === "image" ? await downscaleImage(asset) : asset;
+  const source = asset.type === "image" ? await prepareImage(asset) : asset;
   const ext = source.type === "video" ? "mp4" : source.mimeType.includes("png") ? "png" : "jpg";
   const bytes = await readAssetBytes(source.uri);
   if (!bytes || bytes.byteLength === 0) {

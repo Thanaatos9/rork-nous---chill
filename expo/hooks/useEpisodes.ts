@@ -189,53 +189,13 @@ export function useSetEpisodeCover(episodeId: string, spaceId: string) {
   });
 }
 
-/** Adds extra media to an existing episode's album (camera/gallery). */
-export function useAddEpisodeMedia(episodeId: string, spaceId: string) {
-  const { userId } = useAuth();
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (assets: PickedAsset[]): Promise<{ added: number; failed: number }> => {
-      const rows: {
-        episode_id: string;
-        space_id: string;
-        url: string;
-        filename: string;
-        type: string;
-        uploaded_by: string | null;
-      }[] = [];
-      let failed = 0;
-      // Several at a time, but reported one by one: an unsendable file must not
-      // discard the ones that went through.
-      const outcomes = await uploadMediaAll({ kind: "episodes", spaceId, userId, episodeId }, assets);
-      for (const { asset, url } of outcomes) {
-        if (!url) {
-          failed += 1;
-          continue;
-        }
-        rows.push({
-          episode_id: episodeId,
-          space_id: spaceId,
-          url,
-          filename: url.split("/").pop() || "media",
-          type: asset.type,
-          uploaded_by: userId,
-        });
-      }
-      if (rows.length > 0) {
-        const { error } = await supabase.from("episode_media").insert(rows);
-        if (error) throw error;
-      } else if (failed > 0) {
-        // Nothing survived — surface the failure instead of a silent success.
-        throw new Error("L'envoi des médias a échoué. Réessaie dans un instant.");
-      }
-      return { added: rows.length, failed };
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: qk.episode(episodeId) });
-      queryClient.invalidateQueries({ queryKey: qk.episodes(spaceId) });
-    },
-  });
-}
+/*
+ * Adding media to an existing episode used to live here, as a mutation the
+ * screen awaited. It moved to lib/uploadQueue: a photo must not depend on its
+ * screen staying open, and a mutation cannot outlive the component that started
+ * it. Episode *creation* below still uploads inline — the episode has to exist
+ * before anyone can be sent to it.
+ */
 
 /**
  * Removes one photo or video from an episode's album.

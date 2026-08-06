@@ -15,6 +15,7 @@ import { registerServiceWorker } from "@/lib/pwa";
 import { queryClient } from "@/lib/queryClient";
 import { establishRecoverySession, isRecoveryUrl } from "@/lib/passwordReset";
 import { setPendingInvite } from "@/lib/pendingInvite";
+import { startUploadQueue } from "@/lib/uploadQueue";
 import { ActiveSpaceProvider } from "@/providers/activeSpace";
 import { AuthProvider, useAuth } from "@/providers/auth";
 import { NotificationsProvider } from "@/providers/notifications";
@@ -136,6 +137,8 @@ export default function RootLayout() {
   // Installability + offline shell on web. No-op on native.
   useEffect(() => {
     registerServiceWorker();
+    // Photos left over from a previous session go out now.
+    startUploadQueue();
   }, []);
 
   if (!hasSupabaseConfig) {

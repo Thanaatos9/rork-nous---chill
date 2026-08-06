@@ -37,6 +37,8 @@ import { colors, radius, spacing } from "@/constants/theme";
 import { friendlyError } from "@/lib/errors";
 import { formatDate, formatDuration, formatRelative, normalizeTags } from "@/lib/format";
 import { pickCoverImage, pickFromLibrary, type PickedAsset } from "@/lib/media";
+import { enqueueEpisodeMedia } from "@/lib/uploadQueue";
+import { usePendingUploadCount } from "@/hooks/useUploadQueue";
 import {
   applyMention,
   matchMentions,
@@ -57,7 +59,6 @@ import {
   type SpaceMember,
 } from "@/lib/types";
 import {
-  useAddEpisodeMedia,
   useDeleteEpisode,
   useDeleteEpisodeMedia,
   useEpisode,
@@ -283,7 +284,8 @@ export default function EpisodeDetailScreen() {
   const addComment = useAddComment(episodeId, spaceId);
   const deleteComment = useDeleteComment(episodeId);
   const toggleReaction = useToggleReaction(episodeId);
-  const addMedia = useAddEpisodeMedia(episodeId, spaceId);
+  /** Files handed to the upload queue and not yet in the gallery. */
+  const uploading = usePendingUploadCount(episodeId);
 
   const setCover = useSetEpisodeCover(episodeId, spaceId);
   const deleteMedia = useDeleteEpisodeMedia(episodeId, spaceId);
@@ -422,12 +424,10 @@ export default function EpisodeDetailScreen() {
     try {
       const picked = await pickFromLibrary(true);
       if (picked.length) {
-        const { added, failed } = await addMedia.mutateAsync(picked);
-        if (failed > 0) {
-          toast.info(`${added} média${added > 1 ? "s ajoutés" : " ajouté"}, ${failed} en échec.`);
-        } else {
-          toast.success(added > 1 ? "Médias ajoutés" : "Média ajouté");
-        }
+        // Handed to the upload queue, which survives leaving this screen and
+        // closing the app. The grid shows the count until they land.
+        await enqueueEpisodeMedia(episodeId, spaceId, picked);
+        toast.success(picked.length > 1 ? "Envoi des médias en cours" : "Envoi du média en cours");
       }
     } catch (e) {
       toast.error(friendlyError(e));
@@ -753,16 +753,25 @@ export default function EpisodeDetailScreen() {
             />
             <MediaGrid
               media={media}
-              emptyLabel="Aucune photo ni vidéo pour l'instant."
+              emptyLabel={uploading > 0 ? "" : "Aucune photo ni vidéo pour l'instant."}
               onDelete={canManage ? confirmDeleteMedia : undefined}
             />
+            {/* Sending is no longer something to sit through, so it has to be
+                something to see: without this line the gallery just stays as it
+                was and the photos look lost. */}
+            {uploading > 0 ? (
+              <AppText variant="caption" style={{ color: colors.textMuted }}>
+                {uploading > 1
+                  ? `${uploading} médias en cours d'envoi — ils apparaîtront ici tout seuls.`
+                  : "1 média en cours d'envoi — il apparaîtra ici tout seul."}
+              </AppText>
+            ) : null}
             {participate ? (
               <Button
                 title={mediaCount > 0 ? "Ajouter des photos ou vidéos" : "Ajouter les premières photos"}
                 variant="secondary"
                 icon={<ImagePlus size={18} color={colors.text} />}
                 onPress={onAddMedia}
-                loading={addMedia.isPending}
                 fullWidth
                 style={{ marginTop: spacing.xs }}
               />

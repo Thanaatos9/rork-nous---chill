@@ -13,7 +13,8 @@ import { AppText } from "@/components/ui/Text";
 import { colors, radius, spacing } from "@/constants/theme";
 import { friendlyError } from "@/lib/errors";
 import { captureWithCamera, pickFromLibrary, type PickedAsset } from "@/lib/media";
-import { useAddEpisodeMedia, useEpisode } from "@/hooks/useEpisodes";
+import { enqueueEpisodeMedia } from "@/lib/uploadQueue";
+import { useEpisode } from "@/hooks/useEpisodes";
 import { useMyReview, useUpsertReview, type ReviewValues } from "@/hooks/useReviews";
 import { useToast } from "@/providers/toast";
 
@@ -28,7 +29,6 @@ export default function ReviewScreen() {
   const { data: episode } = useEpisode(episodeId);
   const { data: myReview } = useMyReview(episodeId);
   const upsert = useUpsertReview();
-  const addMedia = useAddEpisodeMedia(episodeId, episode?.space_id ?? "");
 
   const [rating, setRating] = useState<number>(0);
   const [favorite, setFavorite] = useState<string>("");
@@ -154,30 +154,23 @@ export default function ReviewScreen() {
         baseline.current = { rating, favorite, awkward, quote, summary, song };
       }
 
+      // The files are handed to the upload queue rather than sent here: it
+      // copies them somewhere durable and keeps at it across screens, app
+      // restarts and dead tunnels. Nobody has to watch a progress bar to keep
+      // their photos, so the screen closes on the spot.
       let mediaNote = "";
       if (pendingCount > 0) {
-        try {
-          const { added, failed } = await addMedia.mutateAsync(assets);
-          setAssets([]);
-          if (failed > 0) {
-            mediaNote = `, ${added} média${added > 1 ? "s ajoutés" : " ajouté"} et ${failed} en échec`;
-          } else {
-            mediaNote = added > 1 ? ` et ${added} médias ajoutés` : " et 1 média ajouté";
-          }
-        } catch (e) {
-          // The review is already written — keep the picked files on screen so
-          // the upload can be retried instead of silently losing them.
-          toast.error(friendlyError(e));
-          return;
-        }
+        await enqueueEpisodeMedia(episodeId, episode.space_id, assets);
+        setAssets([]);
+        mediaNote = pendingCount > 1 ? ` — ${pendingCount} médias en cours d'envoi` : " — 1 média en cours d'envoi";
       }
 
       toast.success(
         savesReview
           ? `Review enregistrée 🔒${mediaNote}`
           : pendingCount > 1
-          ? "Médias ajoutés à l'épisode"
-          : "Média ajouté à l'épisode",
+          ? "Médias en cours d'envoi"
+          : "Média en cours d'envoi",
       );
       router.back();
     } catch (e) {
