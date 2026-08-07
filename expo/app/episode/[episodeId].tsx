@@ -284,7 +284,11 @@ export default function EpisodeDetailScreen() {
   const addComment = useAddComment(episodeId, spaceId);
   const deleteComment = useDeleteComment(episodeId);
   const toggleReaction = useToggleReaction(episodeId);
-  /** Files handed to the upload queue and not yet in the gallery. */
+  /**
+   * Files handed to the upload queue and not yet in the gallery. The banner
+   * announces them; all this screen owes them is not to claim, underneath it,
+   * that there is nothing here.
+   */
   const uploading = usePendingUploadCount(episodeId);
 
   const setCover = useSetEpisodeCover(episodeId, spaceId);
@@ -427,7 +431,7 @@ export default function EpisodeDetailScreen() {
         // Handed to the upload queue, which survives leaving this screen and
         // closing the app. The grid shows the count until they land.
         await enqueueEpisodeMedia(episodeId, spaceId, picked);
-        toast.success(picked.length > 1 ? "Envoi des médias en cours" : "Envoi du média en cours");
+        toast.success("Envoi des médias en cours, garde l'application ouverte");
       }
     } catch (e) {
       toast.error(friendlyError(e));
@@ -756,16 +760,6 @@ export default function EpisodeDetailScreen() {
               emptyLabel={uploading > 0 ? "" : "Aucune photo ni vidéo pour l'instant."}
               onDelete={canManage ? confirmDeleteMedia : undefined}
             />
-            {/* Sending is no longer something to sit through, so it has to be
-                something to see: without this line the gallery just stays as it
-                was and the photos look lost. */}
-            {uploading > 0 ? (
-              <AppText variant="caption" style={{ color: colors.textMuted }}>
-                {uploading > 1
-                  ? `${uploading} médias en cours d'envoi — ils apparaîtront ici tout seuls.`
-                  : "1 média en cours d'envoi — il apparaîtra ici tout seul."}
-              </AppText>
-            ) : null}
             {participate ? (
               <Button
                 title={mediaCount > 0 ? "Ajouter des photos ou vidéos" : "Ajouter les premières photos"}

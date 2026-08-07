@@ -8,6 +8,7 @@ import { StyleSheet, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { BrandSplash } from "@/components/BrandSplash";
+import { UploadStatus } from "@/components/UploadStatus";
 import { AppText } from "@/components/ui/Text";
 import { colors, spacing } from "@/constants/theme";
 import { hasSupabaseConfig } from "@/lib/supabase";
@@ -161,6 +162,7 @@ export default function RootLayout() {
                 <ToastProvider>
                   <NotificationsProvider>
                     <RootNav />
+                    <UploadStatus />
                     <ToastViewport />
                   </NotificationsProvider>
                 </ToastProvider>

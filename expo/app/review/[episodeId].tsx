@@ -158,19 +158,19 @@ export default function ReviewScreen() {
       // copies them somewhere durable and keeps at it across screens, app
       // restarts and dead tunnels. Nobody has to watch a progress bar to keep
       // their photos, so the screen closes on the spot.
+      // The details of the sending — how many, how far along, when it lands —
+      // are the banner's job from here on, on whatever screen they end up on.
       let mediaNote = "";
       if (pendingCount > 0) {
         await enqueueEpisodeMedia(episodeId, episode.space_id, assets);
         setAssets([]);
-        mediaNote = pendingCount > 1 ? ` — ${pendingCount} médias en cours d'envoi` : " — 1 média en cours d'envoi";
+        mediaNote = " — envoi des médias en cours, garde l'app ouverte";
       }
 
       toast.success(
         savesReview
           ? `Review enregistrée 🔒${mediaNote}`
-          : pendingCount > 1
-          ? "Médias en cours d'envoi"
-          : "Média en cours d'envoi",
+          : "Envoi des médias en cours, garde l'application ouverte",
       );
       router.back();
     } catch (e) {

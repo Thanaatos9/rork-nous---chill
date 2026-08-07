@@ -79,17 +79,48 @@ export function subscribeUploadQueue(listener: Listener): () => void {
   };
 }
 
+/** What a stretch of uploading amounted to, once the queue is empty again. */
+export interface UploadRunResult {
+  sent: number;
+  /** Files given up on for good — never a silent loss. */
+  failed: number;
+}
+
+type RunListener = (result: UploadRunResult) => void;
+const runListeners = new Set<RunListener>();
+
+/**
+ * Called once when the queue empties, not once per file: someone who dropped
+ * twelve photos wants one "c'est envoyé", not twelve.
+ */
+export function subscribeUploadRuns(listener: RunListener): () => void {
+  runListeners.add(listener);
+  return () => {
+    runListeners.delete(listener);
+  };
+}
+
+let sentThisRun = 0;
+let failedThisRun = 0;
+
 /** Stable between changes: every mutation replaces the array rather than editing it. */
 export function uploadQueueSnapshot(): UploadJob[] {
   return queue;
 }
 
-function commit(next: UploadJob[]): void {
+/**
+ * Awaitable on purpose. The queue is only a promise to the user once it is on
+ * disk: between "envoi en cours" and the write landing, killing the app would
+ * leave a durable copy nobody claims — which the orphan sweep would then
+ * delete. Callers who tell someone their photos are safe await this.
+ */
+function commit(next: UploadJob[]): Promise<void> {
   queue = next;
   for (const listener of listeners) listener();
-  if (PERSISTS) {
-    AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(queue)).catch(() => {});
-  }
+  if (!PERSISTS) return Promise.resolve();
+  return AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(queue)).catch((e) => {
+    console.log("[upload-queue] could not persist the queue:", e);
+  });
 }
 
 // ── Persistence ────────────────────────────────────────────────────────────
@@ -162,7 +193,9 @@ export async function enqueueEpisodeMedia(
     });
   }
 
-  commit([...queue, ...jobs]);
+  // Awaited: when the caller's toast appears, the queue is on disk and the app
+  // can be closed on the spot without losing anything.
+  await commit([...queue, ...jobs]);
   void drainUploadQueue();
 }
 
@@ -222,7 +255,8 @@ async function sendEpisodeGroup(group: UploadJob[], userId: string): Promise<boo
       for (const job of done) {
         if (spent.has(job.id)) forgetFile(job);
       }
-      commit(
+      failedThisRun += spent.size;
+      await commit(
         queue
           .filter((job) => !spent.has(job.id))
           .map((job) => {
@@ -234,8 +268,11 @@ async function sendEpisodeGroup(group: UploadJob[], userId: string): Promise<boo
     }
   }
 
+  sentThisRun += done.length;
+
   // Anything not retried again is done with, one way or the other.
   const abandoned = missed.filter((job) => job.attempts + 1 >= MAX_ATTEMPTS);
+  failedThisRun += abandoned.length;
   const settled = new Set([...done, ...abandoned].map((job) => job.id));
   for (const job of done) forgetFile(job);
   for (const job of abandoned) {
@@ -244,7 +281,7 @@ async function sendEpisodeGroup(group: UploadJob[], userId: string): Promise<boo
   }
 
   const retrying = new Set(missed.filter((job) => !settled.has(job.id)).map((job) => job.id));
-  commit(
+  await commit(
     queue
       .filter((job) => !settled.has(job.id))
       .map((job) => (retrying.has(job.id) ? { ...job, attempts: job.attempts + 1 } : job)),
@@ -274,7 +311,16 @@ async function runDrain(): Promise<void> {
     const episodeId = queue[0].episodeId;
     const group = queue.filter((job) => job.episodeId === episodeId);
     const cleared = await sendEpisodeGroup(group, userId);
-    if (!cleared) return;
+    if (!cleared) break;
+  }
+
+  // Silence until there is nothing left: announcing anything while files are
+  // still waiting would be announcing something untrue.
+  if (queue.length === 0 && sentThisRun + failedThisRun > 0) {
+    const result: UploadRunResult = { sent: sentThisRun, failed: failedThisRun };
+    sentThisRun = 0;
+    failedThisRun = 0;
+    for (const listener of runListeners) listener(result);
   }
 }
 
